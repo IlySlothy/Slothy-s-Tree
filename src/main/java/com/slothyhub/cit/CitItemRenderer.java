@@ -33,22 +33,25 @@ public final class CitItemRenderer {
     private static final Field LAYER_PARENT = resolveLayerField("field_55345");
     private static final Field LAYER_RENDER_PASS = resolveLayerField("field_55348");
     private static final Object NORMAL_RENDER_PASS = resolveNormalRenderPass();
-    private static final Field LAYER_BAKED_MODEL = resolveLayerField("field_55346");
+    /** 1.21.4–1.21.7: baked model on layer. Absent on 1.21.8+ (quad-only layers). */
+    private static final Field LAYER_BAKED_MODEL = McVersion.below("1.21.8")
+        ? resolveLayerField("field_55346") : null;
     private static final Field LAYER_RENDER_LAYER = resolveLayerField("field_55347");
     private static final Field LAYER_ITEM_MODEL = resolveLayerField("field_55350");
     private static final Field LAYER_ITEM_MODEL_DATA = resolveLayerField("field_55351");
-    private static final Field LAYER_QUAD_LIST = resolveQuadListField();
-    private static final Method SET_MODEL_AND_LAYER = resolveLayerMethod(
-        "method_65618", class_1087.class, class_1921.class);
-    private static final Method SET_LAYER_SPRITE = resolveLayerMethod("method_67994", class_1058.class);
-    private static final boolean USES_QUAD_LAYERS = detectQuadLayers();
+    /** 1.21.8+: pre-baked quad list on layer (field_56964). */
+    private static final Field LAYER_QUAD_LIST = McVersion.atLeast("1.21.8")
+        ? resolveLayerField("field_56964") : null;
+    private static final boolean USES_QUAD_LAYERS = LAYER_QUAD_LIST != null;
     private static final Set<String> NO_MATCH_LOGGED = ConcurrentHashMap.newKeySet();
 
     static {
-        if (LAYER_BAKED_MODEL == null && !USES_QUAD_LAYERS) {
-            SlothyHubMod.LOGGER.warn("CIT: item render fields missing — custom textures may not apply");
+        if (USES_QUAD_LAYERS) {
+            SlothyHubMod.LOGGER.info("CIT: layer patch mode=quad-remap (MC {})", McVersion.current());
+        } else if (LAYER_BAKED_MODEL != null) {
+            SlothyHubMod.LOGGER.info("CIT: layer patch mode=model-wrap (MC {})", McVersion.current());
         } else {
-            SlothyHubMod.LOGGER.info("CIT: draw-prep patch mode={}", USES_QUAD_LAYERS ? "quads-at-draw" : "quads-at-draw");
+            SlothyHubMod.LOGGER.warn("CIT: item render fields missing — custom textures may not apply");
         }
     }
 
@@ -129,24 +132,13 @@ public final class CitItemRenderer {
         if (sprite == null) return;
         if (!CitVirtualTextures.isAtlasSprite(sprite)) return;
 
-        // 1.21.8+: native layer sprite setter — no draw-path mutation
-        if (SET_LAYER_SPRITE != null && trySetLayerSprite(layer, sprite)) {
-            return;
-        }
-
-        // 1.21.8+: pre-baked quad layers
         if (USES_QUAD_LAYERS) {
             prepareQuadLayer(layer, sprite);
             return;
         }
 
-        // 1.21.4–1.21.7: only remap when vanilla already uses baked-model draw (never null ItemModel)
-        if (LAYER_ITEM_MODEL != null) {
-            try {
-                if (LAYER_ITEM_MODEL.get(layer) != null) return;
-            } catch (Exception ignored) {}
-        }
-        CitDrawContext.begin(layer, sprite);
+        // 1.21.4–1.21.7: ItemModel path wins over baked model — temporarily bypass it for CIT wrap
+        preferBakedModelDrawPath(layer, sprite);
     }
 
     /** Called from {@link com.slothyhub.mixin.MixinCitItemLayerPrepareDraw} after each layer draw. */
@@ -172,6 +164,7 @@ public final class CitItemRenderer {
                 class_10444.class_10446 layer = layers[i];
                 if (layer == null || !isNormalRenderPass(layer)) continue;
                 ((CitLayerAccess) (Object) layer).slothyhub$setCitSprite(sprite);
+                applyCitToLayer(layer, sprite);
             }
         } catch (Exception e) {
             SlothyHubMod.LOGGER.debug("CIT: assign layer sprites failed: {}", e.getMessage());
@@ -185,6 +178,7 @@ public final class CitItemRenderer {
             if (layers == null) return;
             for (class_10444.class_10446 layer : layers) {
                 if (layer == null) continue;
+                unwrapLayerModel(layer);
                 ((CitLayerAccess) (Object) layer).slothyhub$setCitSprite(null);
             }
         } catch (Exception ignored) {}
@@ -201,20 +195,49 @@ public final class CitItemRenderer {
         } catch (Exception ignored) {}
     }
 
-    /** Temporarily prefer baked-model draw so quad remapping can run (1.21.4 ItemModel layers). */
-    private static void forceBakedModelDrawPath(class_10444.class_10446 layer) {
+    private static void applyCitToLayer(class_10444.class_10446 layer, class_1058 sprite) {
+        if (layer == null || sprite == null) return;
+        if (USES_QUAD_LAYERS) {
+            prepareQuadLayer(layer, sprite);
+        } else {
+            wrapLayerModel114(layer, sprite);
+        }
+    }
+
+    /** 1.21.4–1.21.7: wrap the layer baked model so getQuads() returns CIT sprite UVs. */
+    private static void wrapLayerModel114(class_10444.class_10446 layer, class_1058 sprite) {
+        if (LAYER_BAKED_MODEL == null || sprite == null) return;
+        try {
+            class_1087 model = (class_1087) LAYER_BAKED_MODEL.get(layer);
+            if (model == null) return;
+            if (CitLegacyItemRenderer.isWrappedWithSprite(model, sprite)) return;
+            LAYER_BAKED_MODEL.set(layer,
+                CitLegacyItemRenderer.wrapWithSprite(CitLegacyItemRenderer.unwrap(model), sprite));
+        } catch (Exception e) {
+            SlothyHubMod.LOGGER.debug("CIT: wrap layer model failed: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 1.21.4–1.21.7: stash ItemModel type and use baked-model draw for this layer only.
+     * field_55346 stays populated from setSpecialModel — safe unlike nulling without a model.
+     */
+    private static void preferBakedModelDrawPath(class_10444.class_10446 layer, class_1058 sprite) {
         if (LAYER_ITEM_MODEL == null || LAYER_BAKED_MODEL == null) return;
         try {
             Object specialModel = LAYER_ITEM_MODEL.get(layer);
-            if (specialModel == null) return;
-            if (LAYER_BAKED_MODEL.get(layer) == null) return;
+            class_1087 model = (class_1087) LAYER_BAKED_MODEL.get(layer);
+            if (specialModel == null || model == null) return;
 
             CitLayerAccess access = (CitLayerAccess) (Object) layer;
-            Object data = LAYER_ITEM_MODEL_DATA != null ? LAYER_ITEM_MODEL_DATA.get(layer) : null;
-            access.slothyhub$stashSpecialModel(specialModel, data);
-            LAYER_ITEM_MODEL.set(layer, null);
+            if (access.slothyhub$peekStashedSpecialModel() == null) {
+                Object data = LAYER_ITEM_MODEL_DATA != null ? LAYER_ITEM_MODEL_DATA.get(layer) : null;
+                access.slothyhub$stashSpecialModel(specialModel, data);
+                LAYER_ITEM_MODEL.set(layer, null);
+            }
+            wrapLayerModel114(layer, sprite);
         } catch (Exception e) {
-            SlothyHubMod.LOGGER.debug("CIT: force baked draw path failed: {}", e.getMessage());
+            SlothyHubMod.LOGGER.debug("CIT: prefer baked draw path failed: {}", e.getMessage());
         }
     }
 
@@ -235,24 +258,9 @@ public final class CitItemRenderer {
         }
     }
 
-    private static boolean trySetLayerSprite(class_10444.class_10446 layer, class_1058 sprite) {
-        if (SET_LAYER_SPRITE == null || sprite == null) return false;
-        try {
-            SET_LAYER_SPRITE.invoke(layer, sprite);
-            return true;
-        } catch (Exception e) {
-            SlothyHubMod.LOGGER.debug("CIT: layer sprite assign failed: {}", e.getMessage());
-            return false;
-        }
-    }
-
     @SuppressWarnings("unchecked")
     private static void prepareQuadLayer(class_10444.class_10446 layer, class_1058 sprite) {
         try {
-            if (SET_LAYER_SPRITE != null) {
-                SET_LAYER_SPRITE.invoke(layer, sprite);
-            }
-
             List<class_777> quads;
             if (LAYER_QUAD_LIST != null) {
                 quads = (List<class_777>) LAYER_QUAD_LIST.get(layer);
@@ -366,35 +374,6 @@ public final class CitItemRenderer {
         return null;
     }
 
-    private static Field resolveQuadListField() {
-        if (!detectQuadLayers()) return null;
-        for (Field f : class_10444.class_10446.class.getDeclaredFields()) {
-            if (List.class.isAssignableFrom(f.getType())) {
-                f.setAccessible(true);
-                return f;
-            }
-        }
-        return null;
-    }
-
-    private static Method resolveLayerMethod(String name, Class<?>... params) {
-        try {
-            Method m = class_10444.class_10446.class.getMethod(name, params);
-            m.setAccessible(true);
-            return m;
-        } catch (Exception ignored) {}
-        return null;
-    }
-
-    private static boolean detectQuadLayers() {
-        if (McVersion.below("1.21.8")) return false;
-        try {
-            class_10444.class_10446.class.getMethod("method_67997");
-            return true;
-        } catch (NoSuchMethodException e) {
-            return false;
-        }
-    }
 
     private static Object resolveNormalRenderPass() {
         try {
