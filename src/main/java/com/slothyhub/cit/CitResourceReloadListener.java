@@ -13,68 +13,88 @@ import java.util.Map;
 
 /**
  * Fabric resource reload listener — re-parses CIT rules whenever resource packs change.
- * Scans OptiFine/CIT Resewn compatible .properties files under
- * assets/NAMESPACE/optifine/cit/ and assets/NAMESPACE/citresewn/cit/.
+ *
+ * Scans ALL active resource packs for OptiFine / CIT Resewn compatible .properties files.
+ * The files live at: assets/<namespace>/optifine/cit/**  (namespace is usually "minecraft")
+ *
+ * IMPORTANT: ResourceManager.findResources(String namespace, Predicate<Identifier> pathFilter)
+ *            The first argument is the NAMESPACE ("minecraft"), NOT a path prefix.
+ *            We then filter the identifier paths to find cit/ sub-paths.
  */
 public final class CitResourceReloadListener implements SimpleSynchronousResourceReloadListener {
 
     private static final class_2960 ID = class_2960.method_60655("slothyhub", "cit_listener");
 
-    private static final String[] SCAN_PREFIXES = {
-        "optifine/cit/", "citresewn/cit/", "mcpatcher/cit/"
+    /** Namespaces to scan — most packs use "minecraft", some use their own. */
+    private static final String[] NAMESPACES = { "minecraft", "optifine", "citresewn" };
+
+    /** Path prefixes within a namespace that contain CIT .properties files. */
+    private static final String[] CIT_PATH_PREFIXES = {
+        "optifine/cit/", "citresewn/cit/", "mcpatcher/cit/", "cit/"
     };
 
     @Override
     public class_2960 getFabricId() { return ID; }
 
-    /**
-     * Intermediary name for SimpleSynchronousResourceReloadListener#reload(ResourceManager).
-     */
     @Override
     public void method_14491(class_3300 manager) {
         if (!SlothyConfig.isCitEnabled()) {
             CitRuleSet.setActive(new CitRuleSet(List.of()));
             return;
         }
+
         List<CitRule> rules = new ArrayList<>();
-        for (String prefix : SCAN_PREFIXES) {
+        int scanned = 0;
+
+        for (String namespace : NAMESPACES) {
             try {
-                // findResources(String namespace, Predicate<Identifier>) -> Map<Identifier, Resource>
-                Map<class_2960, ?> found = manager.method_14488(prefix,
-                    id -> id.toString().endsWith(".properties"));
+                // findResources(namespace, pathPredicate) -> Map<Identifier, Resource>
+                // First arg = namespace ("minecraft"), second = predicate on the full identifier
+                Map<class_2960, ?> found = manager.method_14488(namespace, id -> {
+                    String path = id.method_12836(); // Identifier#getPath()
+                    if (!path.endsWith(".properties")) return false;
+                    for (String prefix : CIT_PATH_PREFIXES) {
+                        if (path.startsWith(prefix)) return true;
+                    }
+                    return false;
+                });
+
                 for (Map.Entry<class_2960, ?> entry : found.entrySet()) {
-                    class_2960 id = entry.getKey();
-                    Object resource = entry.getValue();
+                    scanned++;
+                    class_2960 rid = entry.getKey();
                     try {
-                        InputStream in = openResource(resource);
+                        InputStream in = openResource(entry.getValue());
                         if (in != null) {
                             try (in) {
-                                CitRule rule = CitRuleParser.parse(id.toString(), in);
+                                CitRule rule = CitRuleParser.parse(rid.toString(), in);
                                 if (rule != null) rules.add(rule);
                             }
                         }
                     } catch (Exception e) {
-                        SlothyHubMod.LOGGER.warn("CIT: could not load {}: {}", id, e.getMessage());
+                        SlothyHubMod.LOGGER.warn("CIT: could not parse {}: {}", rid, e.getMessage());
                     }
                 }
             } catch (Exception e) {
-                SlothyHubMod.LOGGER.debug("CIT: findResources failed for prefix {}: {}", prefix, e.getMessage());
+                SlothyHubMod.LOGGER.debug("CIT: scan failed for namespace '{}': {}", namespace, e.getMessage());
             }
         }
+
         CitRuleSet.setActive(new CitRuleSet(rules));
+        SlothyHubMod.LOGGER.info("CIT: scanned {} properties files, loaded {} rules.", scanned, rules.size());
     }
 
-    /** Opens a resource's InputStream via reflection (Resource API varies by MC version). */
+    /** Opens a Resource's InputStream via reflection (API varies slightly across MC versions). */
     private static InputStream openResource(Object resource) {
         if (resource == null) return null;
-        for (String name : new String[]{"method_14482", "open", "getInputStream"}) {
+        // Try known intermediary/named method names
+        for (String name : new String[]{"method_14482", "open", "getInputStream", "getReader"}) {
             try {
                 java.lang.reflect.Method m = resource.getClass().getMethod(name);
                 Object result = m.invoke(resource);
                 if (result instanceof InputStream is) return is;
             } catch (Exception ignored) {}
         }
-        // Try getDeclaredMethods too (protected methods)
+        // Fallback: any declared no-arg method returning InputStream
         for (java.lang.reflect.Method m : resource.getClass().getDeclaredMethods()) {
             if (m.getParameterCount() == 0 && InputStream.class.isAssignableFrom(m.getReturnType())) {
                 try {
