@@ -17,11 +17,16 @@ final class CitRenderCache {
 
     private CitRenderCache() {}
 
+    static void trackStack(class_10444 state, class_1799 stack) {
+        if (state == null || stack == null || stack.method_7960()) return;
+        STACKS.put(state, stack);
+    }
+
     static void remember(class_10444 state, class_1799 stack, class_1058 sprite, class_2960 textureId) {
         if (state == null || sprite == null) return;
         SPRITES.put(state, sprite);
         if (textureId != null) TEXTURES.put(state, textureId);
-        if (stack != null && !stack.method_7960()) STACKS.put(state, stack);
+        trackStack(state, stack);
     }
 
     static class_1058 sprite(class_10444 state) {

@@ -2,6 +2,7 @@ package com.slothyhub.ui;
 
 import com.slothyhub.SlothyConfig;
 import com.slothyhub.compat.DrawHelper;
+import com.slothyhub.kill.KillEffectAssets;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
@@ -18,18 +19,33 @@ import net.minecraft.class_3417;
 /** Sloth-themed UI utilities for SlothyHub. */
 public final class Ui {
 
-    // Sloth palette — vibrant forest remaster
-    public static final int COL_BG       = (int)0xFF0B1410; // very dark forest
-    public static final int COL_PANEL    = (int)0xFF131D18; // dark mossy panel
-    public static final int COL_SURFACE  = (int)0xFF1D2F24; // surface
-    public static final int COL_ACCENT   = (int)0xFF52D47A; // bright vibrant green
-    public static final int COL_ACCENT_H = (int)0xFF7DE89C; // hover bright
-    public static final int COL_DANGER   = (int)0xFFDE5050; // red danger
-    public static final int COL_TEXT     = (int)0xFFECF5EE; // near white (green tint)
-    public static final int COL_MUTED    = (int)0xFF7A9E84; // sage muted
-    public static final int COL_BORDER   = (int)0xFF253C2C; // subtle green border
-    public static final int COL_DIM      = (int)0xFF4A6054; // dim
-    public static final int COL_GOLD     = (int)0xFFF0C040; // star gold
+    // Sloth palette — reload via {@link #reloadTheme()} when user changes GUI colors
+    public static int COL_BG       = GuiTheme.DEFAULT_BG;
+    public static int COL_PANEL    = GuiTheme.DEFAULT_PANEL;
+    public static int COL_SURFACE  = GuiTheme.DEFAULT_SURFACE;
+    public static int COL_ACCENT   = GuiTheme.DEFAULT_ACCENT;
+    public static int COL_ACCENT_H = GuiTheme.DEFAULT_ACCENT_H;
+    public static int COL_DANGER   = GuiTheme.DEFAULT_DANGER;
+    public static int COL_TEXT     = GuiTheme.DEFAULT_TEXT;
+    public static int COL_MUTED    = GuiTheme.DEFAULT_MUTED;
+    public static int COL_BORDER   = GuiTheme.DEFAULT_BORDER;
+    public static int COL_DIM      = GuiTheme.DEFAULT_DIM;
+    public static int COL_GOLD     = GuiTheme.DEFAULT_GOLD;
+
+    /** Sync {@link GuiTheme} / config into live color constants used by all screens. */
+    public static void reloadTheme() {
+        COL_BG       = GuiTheme.bg();
+        COL_PANEL    = GuiTheme.panel();
+        COL_SURFACE  = GuiTheme.surface();
+        COL_ACCENT   = GuiTheme.accent();
+        COL_ACCENT_H = GuiTheme.accentH();
+        COL_DANGER   = GuiTheme.danger();
+        COL_TEXT     = GuiTheme.text();
+        COL_MUTED    = GuiTheme.muted();
+        COL_BORDER   = GuiTheme.border();
+        COL_DIM      = GuiTheme.dim();
+        COL_GOLD     = GuiTheme.gold();
+    }
 
     private static volatile Method SOUND_PLAY;
     private static volatile Method SOUND_MASTER;
@@ -189,7 +205,12 @@ public final class Ui {
     private static float totemPopScale = 0.6f;
     private static float totemPopRotation = 0f;
 
+    private static long lastKillFxMs;
+
     public static void onKill() {
+        long now = System.currentTimeMillis();
+        if (now - lastKillFxMs < 450) return;
+        lastKillFxMs = now;
         String effect = SlothyConfig.getKillEffect();
         if ("none".equals(effect)) return;
         float cx = 0.45f + (float)(Math.random() * 0.1f);
@@ -216,7 +237,7 @@ public final class Ui {
         if (alpha < 8) return;
         int size = (int)(72 * totemPopScale);
         int cx = screenW / 2, cy = screenH / 2 - 20;
-        class_2960 totem = class_2960.method_60655("minecraft", "item/totem_of_undying");
+        class_2960 totem = KillEffectAssets.totemTextureId();
         DrawHelper.pushMatrices(ctx);
         DrawHelper.translateMatrices(ctx, cx, cy, 0);
         DrawHelper.scaleMatrices(ctx, totemPopScale, totemPopScale, 1f);
@@ -274,7 +295,7 @@ public final class Ui {
     public static void playSuccess() { playSound((class_3414) class_3417.field_14622.comp_349(), 1.5f, 0.7f); }
     public static void playError()   { playSound((class_3414) class_3417.field_14624.comp_349(), 0.5f, 0.5f); }
     public static void playKill()         { playSound(class_3417.field_14627, 1.2f, 0.7f); }
-    public static void playTotemKill()    { playSound(class_3417.field_14931, 1.0f, 0.8f); }
+    public static void playTotemKill()    { KillEffectAssets.playTotemSound(); }
     public static void playAnvilKill()    { playSound(class_3417.field_14833, 0.8f, 0.7f); }
     public static void playThunderKill()  { playSound(class_3417.field_14865, 0.6f, 1.2f); }
 
@@ -420,12 +441,148 @@ public final class Ui {
         return (int)(Math.sin(phase * Math.PI * 2) * amplitude);
     }
 
+    /** Smooth 0→1 animation toward on/off. */
+    public static float tickCheckAnim(float current, boolean checked, float delta) {
+        float target = checked ? 1f : 0f;
+        return lerp(current, target, Math.min(1f, delta * 0.32f));
+    }
+
+    /** Animated checkbox with springy checkmark stroke. */
+    public static void drawAnimatedCheckbox(class_332 ctx, int x, int y, int size, float checkT, boolean hovered) {
+        float pop = checkT > 0.02f
+            ? 1f + 0.07f * (float) Math.sin(Math.min(1f, checkT) * Math.PI)
+            : (hovered ? 1.03f : 1f);
+        int cx = x + size / 2, cy = y + size / 2;
+        int hs = Math.max(1, (int) (size * pop / 2f));
+        int bx = cx - hs, by = cy - hs, bs = hs * 2;
+
+        float borderMix = Math.max(checkT, hovered ? 0.35f : 0f);
+        int border = lerpColor(COL_BORDER, COL_ACCENT, borderMix);
+        int fill = lerpColor(withAlpha(COL_SURFACE & 0xFFFFFF, hovered ? 200 : 140), withAlpha(COL_ACCENT & 0xFFFFFF, 45), checkT);
+        ctx.method_25294(bx, by, bx + bs, by + bs, fill);
+        roundOutline(ctx, bx, by, bs, bs, 2, border);
+        if (checkT > 0.01f) {
+            drawAnimatedCheckmark(ctx, bx, by, bs, checkT, COL_ACCENT);
+        }
+    }
+
+    /** Clear readable check icon for buttons and labels. */
+    public static void drawCheckIcon(class_332 ctx, int x, int y, int size, int color) {
+        drawAnimatedCheckmark(ctx, x, y, size, 1f, color);
+    }
+
+    /** Draws a check stroke that animates in two segments. */
+    public static void drawAnimatedCheckmark(class_332 ctx, int x, int y, int size, float t, int color) {
+        if (t <= 0.001f) return;
+        float ease = easeOutBack(Math.min(1f, t));
+        int alpha = (int) (255 * Math.min(1f, t * 1.15f));
+        int c = withAlpha(color & 0xFFFFFF, alpha);
+        int thick = Math.max(2, size / 3);
+
+        float sx = x + size * 0.18f, sy = y + size * 0.55f;
+        float mx = x + size * 0.40f, my = y + size * 0.78f;
+        float ex = x + size * 0.84f, ey = y + size * 0.24f;
+        float seg1 = 0.44f;
+        if (ease <= seg1) {
+            float p = ease / seg1;
+            drawThickLine(ctx, sx, sy, sx + (mx - sx) * p, sy + (my - sy) * p, c, thick);
+        } else {
+            drawThickLine(ctx, sx, sy, mx, my, c, thick);
+            float p = (ease - seg1) / (1f - seg1);
+            drawThickLine(ctx, mx, my, mx + (ex - mx) * p, my + (ey - my) * p, c, thick);
+        }
+    }
+
+    private static void drawThickLine(class_332 ctx, float x0, float y0, float x1, float y1, int color, int thick) {
+        float dx = x1 - x0, dy = y1 - y0;
+        float len = (float) Math.hypot(dx, dy);
+        if (len < 0.5f) return;
+        int steps = Math.max(1, (int) len);
+        float ux = dx / len, uy = dy / len;
+        int half = thick / 2;
+        for (int i = 0; i <= steps; i++) {
+            float t = i / (float) steps;
+            int px = (int) (x0 + dx * t), py = (int) (y0 + dy * t);
+            ctx.method_25294(px - half, py - half, px + half + 1, py + half + 1, color);
+        }
+    }
+
+    /** Pixel sloth face logo — top-left brand mark with gentle bob. */
+    public static void drawSlothLogo(class_332 ctx, int x, int y, float phase) {
+        int bob = getFloatOffset(phase, 1.2f);
+        int cy = y + bob;
+        int size = 16;
+        ctx.method_25294(x - 2, cy - 2, x + size + 2, cy + size + 2, withAlpha(0x000000, 180));
+        ctx.method_25294(x - 1, cy - 1, x + size + 1, cy + size + 1, withAlpha(0xFFFFFF, 48));
+        if (GuiAssets.hasLogo()) {
+            int texW = GuiAssets.logoWidth();
+            int texH = GuiAssets.logoHeight();
+            DrawHelper.drawTexture(ctx, GuiAssets.logoId(), x, cy, 0, 0, size, size, texW, texH);
+        } else {
+            drawSlothLogoProcedural(ctx, x, y, phase);
+        }
+    }
+
+    /** Procedural sloth face — fallback if logo texture is not registered yet. */
+    static void drawSlothLogoProcedural(class_332 ctx, int x, int y, float phase) {
+        int bob = getFloatOffset(phase, 1.2f);
+        int cy = y + bob;
+        int glowA = 40 + (int) (20 * Math.sin(phase * Math.PI * 2));
+        ctx.method_25294(x - 1, cy - 1, x + 18, cy + 17, withAlpha(COL_ACCENT & 0xFFFFFF, glowA));
+        ctx.method_25294(x, cy, x + 16, cy + 16, withAlpha(0xFFFFFF, 18));
+
+        int accentRgb = COL_ACCENT & 0xFFFFFF;
+        int panelRgb = COL_PANEL & 0xFFFFFF;
+        int fur = logoTone(0x7A9B5E, accentRgb, panelRgb, 0.35f);
+        int furDark = lerpColor(fur, 0x2A1E10, 0.5f) & 0xFFFFFF;
+        int face = lerpColor(0xD4C4A8, COL_SURFACE & 0xFFFFFF, 0.25f) & 0xFFFFFF;
+
+        ctx.method_25294(x + 1, cy + 1, x + 4, cy + 4, fur);
+        ctx.method_25294(x + 14, cy + 1, x + 17, cy + 4, fur);
+        ctx.method_25294(x + 2, cy + 3, x + 16, cy + 15, fur);
+        ctx.method_25294(x + 4, cy + 4, x + 14, cy + 14, face);
+        ctx.method_25294(x + 4, cy + 6, x + 7, cy + 10, furDark);
+        ctx.method_25294(x + 11, cy + 6, x + 14, cy + 10, furDark);
+        ctx.method_25294(x + 5, cy + 7, x + 7, cy + 9, 0xFFFFFF);
+        ctx.method_25294(x + 12, cy + 7, x + 14, cy + 9, 0xFFFFFF);
+        ctx.method_25294(x + 6, cy + 8, x + 7, cy + 9, 0x222222);
+        ctx.method_25294(x + 13, cy + 8, x + 14, cy + 9, 0x222222);
+        ctx.method_25294(x + 8, cy + 10, x + 10, cy + 11, 0x553322);
+        ctx.method_25294(x + 7, cy + 12, x + 11, cy + 13, furDark);
+        float claw = (float) Math.sin(phase * Math.PI * 2) * 1.2f;
+        ctx.method_25294(x + 8, cy + 14, x + 10, cy + 16, fur);
+        ctx.method_25294((int) (x + 7 + claw), cy + 15, (int) (x + 11 + claw), cy + 16, furDark);
+    }
+
+    /** Keep logo readable even when accent matches the panel (dark custom themes). */
+    private static int logoTone(int base, int accentRgb, int panelRgb, float accentMix) {
+        int mixed = lerpColor(base, accentRgb, accentMix) & 0xFFFFFF;
+        if (colorDistance(mixed, panelRgb) < 55) {
+            mixed = lerpColor(base, 0xFFFFFF, 0.15f) & 0xFFFFFF;
+        }
+        return mixed;
+    }
+
+    private static int colorDistance(int a, int b) {
+        int dr = ((a >> 16) & 0xFF) - ((b >> 16) & 0xFF);
+        int dg = ((a >> 8) & 0xFF) - ((b >> 8) & 0xFF);
+        int db = (a & 0xFF) - (b & 0xFF);
+        return (int) Math.sqrt(dr * dr + dg * dg + db * db);
+    }
+
+    /** Compact 40px header bar with sloth logo + title. */
+    public static void drawSubscreenHeader(class_332 ctx, net.minecraft.class_327 font, int screenW, String title, float delta) {
+        float phase = (float) (System.currentTimeMillis() % 4000L) / 4000f;
+        ctx.method_25294(0, 0, screenW, 40, COL_PANEL);
+        ctx.method_25294(0, 40, screenW, 41, COL_BORDER);
+        ctx.method_25294(0, 0, screenW, 2, COL_ACCENT);
+        drawSlothLogo(ctx, 8, 11, phase);
+        DrawHelper.drawText(ctx, font, title, 30, 14, COL_TEXT, false);
+    }
+
     /** Small sloth face badge for headers. */
     public static void drawSlothBadge(class_332 ctx, net.minecraft.class_327 font, int x, int y, float phase) {
-        int bob = getFloatOffset(phase, 1.5f);
-        int cy = y + bob;
-        ctx.method_25294(x, cy + 1, x + 14, cy + 13, withAlpha(COL_ACCENT & 0xFFFFFF, 25));
-        DrawHelper.drawText(ctx, font, "\uD83E\uDD8A", x, cy, COL_ACCENT, false);
+        drawSlothLogo(ctx, x, y, phase);
     }
 
     /** Paw print decoration. */

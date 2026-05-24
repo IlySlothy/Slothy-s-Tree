@@ -1,10 +1,12 @@
 package com.slothyhub.cit;
 
 import com.slothyhub.SlothyHubMod;
+import net.minecraft.class_1799;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -44,77 +46,82 @@ public final class CitRuleSet {
     }
 
     /**
-     * Find the first matching rule for an item.
-     *
-     * @param itemId   namespaced item ID (e.g. "minecraft:diamond_sword")
-     * @param displayNames candidate display strings (custom_name, item_name, lore, etc.)
-     * @return the first matching rule, or null if none applies
+     * Find the best matching rule for an item stack (CIT Resewn-style specificity).
      */
-    public CitRule findMatch(String itemId, List<String> displayNames) {
+    public CitRule findMatch(String itemId, List<String> displayNames, class_1799 stack) {
         List<CitRule> candidates = byItem.getOrDefault(itemId, Collections.emptyList());
         if (candidates.isEmpty()) return null;
 
+        CitRule best = null;
+        int bestScore = Integer.MAX_VALUE;
+
         if (displayNames == null || displayNames.isEmpty()) {
             for (CitRule rule : candidates) {
-                if (rule.nameMatcher.isBlank()) return rule;
+                if (!rule.nameMatcher.isBlank()) continue;
+                if (!CitRuleConditions.matchesStack(rule, stack)) continue;
+                return rule;
             }
             return null;
         }
 
-        for (String name : displayNames) {
+        for (int nameIdx = 0; nameIdx < displayNames.size(); nameIdx++) {
+            String name = displayNames.get(nameIdx);
             for (CitRule rule : candidates) {
-                if (matches(rule, name)) return rule;
+                if (!CitRuleConditions.matchesStack(rule, stack)) continue;
+                int score = CitRuleConditions.nameMatchScore(rule, name, nameIdx);
+                if (score < 0) continue;
+                score += ruleSpecificityBonus(rule);
+                if (score < bestScore) {
+                    bestScore = score;
+                    best = rule;
+                }
             }
         }
-        return null;
+        return best;
+    }
+
+    public CitRule findMatch(String itemId, List<String> displayNames) {
+        return findMatch(itemId, displayNames, null);
     }
 
     public CitRule findMatch(String itemId, String displayName) {
         if (displayName == null || displayName.isBlank()) {
-            return findMatch(itemId, List.of());
+            return findMatch(itemId, List.of(), null);
         }
-        return findMatch(itemId, List.of(displayName));
+        return findMatch(itemId, List.of(displayName), null);
     }
 
-    private boolean matches(CitRule rule, String displayName) {
-        if (!rule.nameMatcher.isBlank()) {
-            if (displayName == null) return false;
-            String plain = CitItemRenderer.stripFormatting(displayName);
-            String pattern = rule.nameMatcher.trim();
-            if (pattern.startsWith("regex:")) {
-                try {
-                    if (!plain.matches(pattern.substring(6))) return false;
-                } catch (Exception e) {
-                    return false;
-                }
-            } else if (pattern.startsWith("ipattern:")) {
-                String want = CitItemRenderer.stripFormatting(pattern.substring(9));
-                String lower = plain.toLowerCase(Locale.ROOT);
-                String wantLower = want.toLowerCase(Locale.ROOT);
-                if (lower.equals(wantLower)) return true;
-                // Item name contains pattern: "[RANK] Warden Sword"
-                if (!wantLower.isEmpty() && lower.contains(wantLower)) return true;
-                // Pattern contains item name: anvil typing "Warden" → "Warden Sword"
-                if (lower.length() >= 4 && wantLower.startsWith(lower)) return true;
-                if (lower.length() >= 6 && wantLower.contains(lower) && !isGenericToken(lower)) return true;
-                return false;
-            } else if (pattern.startsWith("pattern:")) {
-                if (!plain.equals(CitItemRenderer.stripFormatting(pattern.substring(8)))) return false;
-            } else {
-                if (!plain.equalsIgnoreCase(CitItemRenderer.stripFormatting(pattern))) return false;
-            }
+    /** Prefer rules with explicit name patterns and longer ipatterns (more specific). */
+    private static int ruleSpecificityBonus(CitRule rule) {
+        if (rule.nameMatcher.isBlank()) return 5000;
+        String pattern = rule.nameMatcher.trim();
+        if (pattern.startsWith("ipattern:") || pattern.startsWith("pattern:")) {
+            return Math.max(0, 400 - pattern.length());
         }
-        return true;
-    }
-
-    private static boolean isGenericToken(String lower) {
-        return lower.equals("sword") || lower.equals("netherite") || lower.equals("minecraft")
-            || lower.startsWith("minecraft:") || lower.endsWith("_sword");
+        return 200;
     }
 
     public List<CitRule> getRules() { return rules; }
     public List<CitRule> allRules() { return rules; }
     public boolean isEmpty() { return rules.isEmpty(); }
+
+    /** Deduplicate rules — later entries win (higher resource-pack priority). */
+    public static List<CitRule> dedupe(List<CitRule> rules) {
+        Map<String, CitRule> unique = new LinkedHashMap<>();
+        for (CitRule rule : rules) {
+            unique.put(dedupeKey(rule), rule);
+        }
+        return new ArrayList<>(unique.values());
+    }
+
+    private static String dedupeKey(CitRule rule) {
+        StringBuilder items = new StringBuilder();
+        for (String item : rule.items) {
+            if (items.length() > 0) items.append(',');
+            items.append(item.contains(":") ? item : "minecraft:" + item);
+        }
+        return items + "#" + rule.nameMatcher.trim().toLowerCase(Locale.ROOT);
+    }
 
     /** First item id of a rule (convenience for texture picker). */
     public static String firstItem(CitRule r) {

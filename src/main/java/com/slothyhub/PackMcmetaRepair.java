@@ -6,7 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.stream.Stream;
 
-/** Fixes broken pack.mcmeta files in resourcepacks/ so Minecraft can load them. */
+/** Fixes broken or outdated pack.mcmeta files in resourcepacks/ so Minecraft can load them. */
 public final class PackMcmetaRepair {
 
     private PackMcmetaRepair() {}
@@ -21,6 +21,14 @@ public final class PackMcmetaRepair {
         try {
             Path rp = FabricLoader.getInstance().getGameDir().resolve("resourcepacks");
             if (!Files.isDirectory(rp)) return;
+            try (Stream<Path> entries = Files.list(rp)) {
+                for (Path entry : entries.toList()) {
+                    String name = entry.getFileName().toString();
+                    if (name.endsWith(".slothyhub-repair.tmp")) {
+                        try { Files.deleteIfExists(entry); } catch (Exception ignored) {}
+                    }
+                }
+            } catch (Exception ignored) {}
             int fixed = 0;
             try (Stream<Path> entries = Files.list(rp)) {
                 for (Path entry : entries.toList()) {
@@ -29,18 +37,25 @@ public final class PackMcmetaRepair {
                     if (Files.isDirectory(entry)) {
                         try {
                             Path mcmeta = entry.resolve("pack.mcmeta");
-                            if (Files.exists(mcmeta) && !PackMetaUtil.isValidMcmeta(Files.readString(mcmeta))) {
-                                PackMetaUtil.repairFolder(entry);
-                                fixed++;
+                            if (Files.exists(mcmeta)) {
+                                String raw = Files.readString(mcmeta);
+                                if (PackMetaUtil.needsRepair(raw)) {
+                                    PackMetaUtil.repairFolder(entry);
+                                    fixed++;
+                                }
                             }
                         } catch (Exception ignored) {}
                     } else if (name.toLowerCase().endsWith(".zip")) {
-                        if (PackMetaUtil.repairZip(entry)) fixed++;
+                        if (PackMetaUtil.repairZip(entry)) {
+                            fixed++;
+                        } else if (PackMetaUtil.migrateCorruptZipToFolder(entry)) {
+                            fixed++;
+                        }
                     }
                 }
             }
             if (fixed > 0) {
-                SlothyHubMod.LOGGER.info("SlothyHub: repaired {} broken pack.mcmeta file(s)", fixed);
+                SlothyHubMod.LOGGER.info("SlothyHub: repaired {} pack.mcmeta file(s)", fixed);
             }
         } catch (Exception e) {
             SlothyHubMod.LOGGER.warn("SlothyHub: pack.mcmeta repair scan failed: {}", e.getMessage());

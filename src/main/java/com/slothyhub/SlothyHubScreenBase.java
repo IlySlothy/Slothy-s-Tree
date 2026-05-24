@@ -35,15 +35,6 @@ public abstract class SlothyHubScreenBase extends class_437 {
     private static final int PAD     = 16;
 
     // ── Colours ───────────────────────────────────────────────────────────
-    private static final int BG      = Ui.COL_BG;
-    private static final int PANEL   = Ui.COL_PANEL;
-    private static final int SURFACE = Ui.COL_SURFACE;
-    private static final int ACCENT  = Ui.COL_ACCENT;
-    private static final int DANGER  = Ui.COL_DANGER;
-    private static final int TEXT    = Ui.COL_TEXT;
-    private static final int MUTED   = Ui.COL_MUTED;
-    private static final int BORDER  = Ui.COL_BORDER;
-    private static final int GOLD    = Ui.COL_GOLD;
 
     private static int col(int rgb, int a) { return Ui.withAlpha(rgb & 0xFFFFFF, a); }
     private static int lerp(int a, int b, float t) { return Ui.lerpColor(a, b, t); }
@@ -52,8 +43,8 @@ public abstract class SlothyHubScreenBase extends class_437 {
     private static final String[] TABS = {"All","Applied","Smp","NethPot","CPVP","ElyPVP"};
 
     // ── Main nav ──────────────────────────────────────────────────────────
-    // nav[0]=PACKS, nav[1]=TEXTURES, nav[2]=KILL FX, nav[3]=FEATHER
-    private static final String[] NAV = {"PACKS","TEXTURES","LIBRARY","KILL FX","FEATHER"};
+    // nav[0]=PACKS, nav[1]=TEXTURES, nav[2]=LIBRARY, nav[3]=KILL FX, nav[4]=GUI
+    private static final String[] NAV = {"PACKS","TEXTURES","LIBRARY","KILL FX","GUI"};
     private int activeNav = 0; // stays on PACKS in this screen
 
     // ── State ─────────────────────────────────────────────────────────────
@@ -110,6 +101,7 @@ public abstract class SlothyHubScreenBase extends class_437 {
     private int navY, navH;
     private int gearX, gearY, gearSz;
     private int localCheckX, localCheckY, localCheckW, localCheckH;
+    private float localCheckAnim = 0f;
 
     private final InputCompat.Poller inputPoller = new InputCompat.Poller();
 
@@ -195,7 +187,7 @@ public abstract class SlothyHubScreenBase extends class_437 {
         drawHeader(ctx, mx, my, delta);
         drawToolbar(ctx, mx, my, delta);
         drawList(ctx, mx, my, delta);
-        drawFooter(ctx, mx, my);
+        drawFooter(ctx, mx, my, delta);
 
         for (class_364 w : method_25396()) {
             if (w instanceof class_4068 d) d.method_25394(ctx, mx, my, delta);
@@ -203,17 +195,18 @@ public abstract class SlothyHubScreenBase extends class_437 {
 
         if (pendingTooltip != null) drawTooltip(ctx, pendingTooltip, tooltipMx, tooltipMy);
         if (previewT > 0.01f) drawPreview(ctx);
+        Ui.renderSelectionParticles(ctx, delta);
     }
 
     // ── Background ────────────────────────────────────────────────────────
 
     private void drawBg(class_332 ctx, float delta) {
-        ctx.method_25294(0, 0, field_22789, field_22790, BG);
+        ctx.method_25294(0, 0, field_22789, field_22790, Ui.COL_BG);
         // Subtle radial glow from centre
         int cx = field_22789 / 2, cy = field_22790 / 2;
         int gw = (int)(field_22789 * 0.65f), gh = (int)(field_22790 * 0.55f);
         ctx.method_25296(cx - gw / 2, cy - gh / 2, cx + gw / 2, cy + gh / 2,
-            col(ACCENT, 6), col(BG, 0));
+            col(Ui.COL_ACCENT, 6), col(Ui.COL_BG, 0));
         if (SlothyConfig.isBackgroundEffects())
             Ui.renderLeafParallax(ctx, field_22789, field_22790, delta);
         Ui.drawCornerVines(ctx, field_22789, field_22790,
@@ -224,27 +217,26 @@ public abstract class SlothyHubScreenBase extends class_437 {
 
     private void drawHeader(class_332 ctx, int mx, int my, float delta) {
         // Panel with gradient bottom edge
-        ctx.method_25294(0, 0, field_22789, HEADER, PANEL);
+        ctx.method_25294(0, 0, field_22789, HEADER, Ui.COL_PANEL);
         // 2px accent stripe at very top
-        ctx.method_25294(0, 0, field_22789, 2, ACCENT);
+        ctx.method_25294(0, 0, field_22789, 2, Ui.COL_ACCENT);
         // 1px separator at bottom (subtle)
-        ctx.method_25294(0, HEADER - 1, field_22789, HEADER, BORDER);
+        ctx.method_25294(0, HEADER - 1, field_22789, HEADER, Ui.COL_BORDER);
         // Gradient glow below accent stripe
-        ctx.method_25296(0, 2, field_22789 / 2, 6, col(ACCENT, 30), col(ACCENT, 0));
-        ctx.method_25296(field_22789 / 2, 2, field_22789, 6, col(ACCENT, 0), col(ACCENT, 30));
+        ctx.method_25296(0, 2, field_22789 / 2, 6, col(Ui.COL_ACCENT, 30), col(Ui.COL_ACCENT, 0));
+        ctx.method_25296(field_22789 / 2, 2, field_22789, 6, col(Ui.COL_ACCENT, 0), col(Ui.COL_ACCENT, 30));
 
-        // ── Logo text ────────────────────────────────────────────────────
-        float phase = (float)(System.currentTimeMillis() % 4000L) / 4000f;
-        Ui.drawSlothBadge(ctx, field_22793, PAD, (HEADER - 14) / 2, phase);
+        // Text before logo texture — avoids garbled labels on 1.21.4
         String logo = "SLOTHY'S TREE";
         int logoX = PAD + 22;
         int logoY = (HEADER - 9) / 2 + 1;
-        // Shadow for depth
         DrawHelper.drawText(ctx, field_22793, logo, logoX + 1, logoY + 1, col(0x000000, 80), false);
-        DrawHelper.drawText(ctx, field_22793, logo, logoX, logoY, ACCENT, false);
+        DrawHelper.drawText(ctx, field_22793, logo, logoX, logoY, Ui.COL_ACCENT, false);
+        float phase = (float)(System.currentTimeMillis() % 4000L) / 4000f;
+        Ui.drawSlothLogo(ctx, PAD, (HEADER - 16) / 2, phase);
         int afterLogo = logoX + field_22793.method_1727(logo) + 12;
         // thin divider
-        ctx.method_25294(afterLogo, 12, afterLogo + 1, HEADER - 12, BORDER);
+        ctx.method_25294(afterLogo, 12, afterLogo + 1, HEADER - 12, Ui.COL_BORDER);
 
         // ── Nav pills ────────────────────────────────────────────────────
         navY = (HEADER - 16) / 2;
@@ -268,15 +260,15 @@ public abstract class SlothyHubScreenBase extends class_437 {
 
         if (!loading && error == null) {
             boolean live = SlothyConfig.isConfigured();
-            int dot = live ? ACCENT : col(0x885040, 255);
+            int dot = live ? Ui.COL_ACCENT : col(0x885040, 255);
             String txt = live ? ("LIVE  " + allPacks.size()) : "● LOCAL ONLY";
             int tw = field_22793.method_1727(txt);
             int rx = gearX - 12 - tw;
             if (!live) {
-                DrawHelper.drawText(ctx, field_22793, txt, rx, (HEADER - 9) / 2 + 1, col(ACCENT & 0xFFFFFF, 180), false);
+                DrawHelper.drawText(ctx, field_22793, txt, rx, (HEADER - 9) / 2 + 1, col(Ui.COL_ACCENT & 0xFFFFFF, 180), false);
             } else {
                 ctx.method_25294(rx - 7, HEADER / 2 - 2, rx - 5, HEADER / 2 + 2, dot);
-                DrawHelper.drawText(ctx, field_22793, txt, rx, (HEADER - 9) / 2 + 1, MUTED, false);
+                DrawHelper.drawText(ctx, field_22793, txt, rx, (HEADER - 9) / 2 + 1, Ui.COL_MUTED, false);
             }
         }
     }
@@ -291,27 +283,27 @@ public abstract class SlothyHubScreenBase extends class_437 {
 
         if (active) {
             // Filled pill with accent glow
-            ctx.method_25294(x, y, x + w, y + h, col(ACCENT & 0xFFFFFF, 30));
-            ctx.method_25294(x, y, x + w, y + 1, ACCENT);
-            ctx.method_25294(x, y + h - 1, x + w, y + h, col(ACCENT & 0xFFFFFF, 80));
-            ctx.method_25294(x, y, x + 1, y + h, col(ACCENT & 0xFFFFFF, 80));
-            ctx.method_25294(x + w - 1, y, x + w, y + h, col(ACCENT & 0xFFFFFF, 80));
-            DrawHelper.drawText(ctx, field_22793, label, x + 7, y + (h - 9) / 2, ACCENT, false);
+            ctx.method_25294(x, y, x + w, y + h, col(Ui.COL_ACCENT & 0xFFFFFF, 30));
+            ctx.method_25294(x, y, x + w, y + 1, Ui.COL_ACCENT);
+            ctx.method_25294(x, y + h - 1, x + w, y + h, col(Ui.COL_ACCENT & 0xFFFFFF, 80));
+            ctx.method_25294(x, y, x + 1, y + h, col(Ui.COL_ACCENT & 0xFFFFFF, 80));
+            ctx.method_25294(x + w - 1, y, x + w, y + h, col(Ui.COL_ACCENT & 0xFFFFFF, 80));
+            DrawHelper.drawText(ctx, field_22793, label, x + 7, y + (h - 9) / 2, Ui.COL_ACCENT, false);
         } else {
             if (ht > 0.02f) {
-                ctx.method_25294(x, y, x + w, y + h, col(SURFACE & 0xFFFFFF, (int)(150 * ht)));
-                ctx.method_25294(x, y, x + w, y + 1, col(BORDER & 0xFFFFFF, (int)(200 * ht)));
-                ctx.method_25294(x, y + h - 1, x + w, y + h, col(BORDER & 0xFFFFFF, (int)(100 * ht)));
-                ctx.method_25294(x, y, x + 1, y + h, col(BORDER & 0xFFFFFF, (int)(150 * ht)));
-                ctx.method_25294(x + w - 1, y, x + w, y + h, col(BORDER & 0xFFFFFF, (int)(150 * ht)));
+                ctx.method_25294(x, y, x + w, y + h, col(Ui.COL_SURFACE & 0xFFFFFF, (int)(150 * ht)));
+                ctx.method_25294(x, y, x + w, y + 1, col(Ui.COL_BORDER & 0xFFFFFF, (int)(200 * ht)));
+                ctx.method_25294(x, y + h - 1, x + w, y + h, col(Ui.COL_BORDER & 0xFFFFFF, (int)(100 * ht)));
+                ctx.method_25294(x, y, x + 1, y + h, col(Ui.COL_BORDER & 0xFFFFFF, (int)(150 * ht)));
+                ctx.method_25294(x + w - 1, y, x + w, y + h, col(Ui.COL_BORDER & 0xFFFFFF, (int)(150 * ht)));
             }
-            int fg = lerp(MUTED, TEXT, ht);
+            int fg = lerp(Ui.COL_MUTED, Ui.COL_TEXT, ht);
             DrawHelper.drawText(ctx, field_22793, label, x + 7, y + (h - 9) / 2, fg, false);
         }
     }
 
     private void drawGear(class_332 ctx, int x, int y, int s, boolean hov) {
-        int c = hov ? ACCENT : MUTED;
+        int c = hov ? Ui.COL_ACCENT : Ui.COL_MUTED;
         int cx = x + s / 2, cy = y + s / 2;
         ctx.method_25294(cx - 1, y,         cx + 1, y + 3,         c);
         ctx.method_25294(cx - 1, y + s - 3, cx + 1, y + s,         c);
@@ -326,35 +318,35 @@ public abstract class SlothyHubScreenBase extends class_437 {
         ctx.method_25294(cx - r, cy + r, cx + r, cy + r + 1, c);
         ctx.method_25294(cx - r, cy - r, cx - r + 1, cy + r + 1, c);
         ctx.method_25294(cx + r - 1, cy - r, cx + r, cy + r + 1, c);
-        ctx.method_25294(cx - 2, cy - 2, cx + 2, cy + 2, BG);
+        ctx.method_25294(cx - 2, cy - 2, cx + 2, cy + 2, Ui.COL_BG);
     }
 
     // ── Toolbar ───────────────────────────────────────────────────────────
 
     private void drawToolbar(class_332 ctx, int mx, int my, float delta) {
         int top = HEADER, bot = HEADER + TOOLBAR;
-        ctx.method_25294(0, top, field_22789, bot, BG);
-        ctx.method_25294(0, bot - 1, field_22789, bot, BORDER);
+        ctx.method_25294(0, top, field_22789, bot, Ui.COL_BG);
+        ctx.method_25294(0, bot - 1, field_22789, bot, Ui.COL_BORDER);
 
         // Search box — drawn manually (MC 1.21.8 TextField renders at wrong Y)
         int sx = searchX - 2;
         int sy = searchY - 2;
         int sw = searchW + 4;
         int sh = searchH + 4;
-        ctx.method_25294(sx, sy, sx + sw, sy + sh, col(SURFACE & 0xFFFFFF, 120));
-        int lineCol = searchFocused ? ACCENT : BORDER;
+        ctx.method_25294(sx, sy, sx + sw, sy + sh, col(Ui.COL_SURFACE & 0xFFFFFF, 120));
+        int lineCol = searchFocused ? Ui.COL_ACCENT : Ui.COL_BORDER;
         ctx.method_25294(sx, sy + sh, sx + sw, sy + sh + 1, lineCol);
         int iconX = sx + 4, iconY = sy + sh / 2 - 2;
-        ctx.method_25294(iconX, iconY, iconX + 4, iconY + 4, col(MUTED & 0xFFFFFF, 150));
-        ctx.method_25294(iconX + 2, iconY + 2, iconX + 3, iconY + 3, col(BG & 0xFFFFFF, 180));
+        ctx.method_25294(iconX, iconY, iconX + 4, iconY + 4, col(Ui.COL_MUTED & 0xFFFFFF, 150));
+        ctx.method_25294(iconX + 2, iconY + 2, iconX + 3, iconY + 3, col(Ui.COL_BG & 0xFFFFFF, 180));
         int textX = sx + 14;
         int textY = sy + (sh - 8) / 2;
         if (searchQuery.isEmpty() && !searchFocused) {
-            DrawHelper.drawText(ctx, field_22793, "Search packs...", textX, textY, MUTED, false);
+            DrawHelper.drawText(ctx, field_22793, "Search packs...", textX, textY, Ui.COL_MUTED, false);
         } else {
             String shown = searchQuery;
             if (searchFocused && (System.currentTimeMillis() / 500) % 2 == 0) shown += "_";
-            DrawHelper.drawText(ctx, field_22793, shown, textX, textY, TEXT, false);
+            DrawHelper.drawText(ctx, field_22793, shown, textX, textY, Ui.COL_TEXT, false);
         }
 
         // Filter tabs — pill style, right-aligned
@@ -384,16 +376,16 @@ public abstract class SlothyHubScreenBase extends class_437 {
 
             if (sel) {
                 // Filled pill
-                ctx.method_25294(tx, tabY, tx + cw, tabY + tabH, col(ACCENT & 0xFFFFFF, 35));
-                ctx.method_25294(tx, tabY, tx + cw, tabY + 1, col(ACCENT & 0xFFFFFF, 200));
-                ctx.method_25294(tx, tabY + tabH - 1, tx + cw, tabY + tabH, col(ACCENT & 0xFFFFFF, 80));
-                ctx.method_25294(tx, tabY, tx + 1, tabY + tabH, col(ACCENT & 0xFFFFFF, 120));
-                ctx.method_25294(tx + cw - 1, tabY, tx + cw, tabY + tabH, col(ACCENT & 0xFFFFFF, 120));
+                ctx.method_25294(tx, tabY, tx + cw, tabY + tabH, col(Ui.COL_ACCENT & 0xFFFFFF, 35));
+                ctx.method_25294(tx, tabY, tx + cw, tabY + 1, col(Ui.COL_ACCENT & 0xFFFFFF, 200));
+                ctx.method_25294(tx, tabY + tabH - 1, tx + cw, tabY + tabH, col(Ui.COL_ACCENT & 0xFFFFFF, 80));
+                ctx.method_25294(tx, tabY, tx + 1, tabY + tabH, col(Ui.COL_ACCENT & 0xFFFFFF, 120));
+                ctx.method_25294(tx + cw - 1, tabY, tx + cw, tabY + tabH, col(Ui.COL_ACCENT & 0xFFFFFF, 120));
                 DrawHelper.drawText(ctx, field_22793, label,
-                    tx + (cw - field_22793.method_1727(label)) / 2, tabY + (tabH - 9) / 2, ACCENT, false);
+                    tx + (cw - field_22793.method_1727(label)) / 2, tabY + (tabH - 9) / 2, Ui.COL_ACCENT, false);
             } else {
-                if (ht > 0.02f) ctx.method_25294(tx, tabY, tx + cw, tabY + tabH, col(SURFACE & 0xFFFFFF, (int)(120 * ht)));
-                int fg = lerp(MUTED, TEXT, ht);
+                if (ht > 0.02f) ctx.method_25294(tx, tabY, tx + cw, tabY + tabH, col(Ui.COL_SURFACE & 0xFFFFFF, (int)(120 * ht)));
+                int fg = lerp(Ui.COL_MUTED, Ui.COL_TEXT, ht);
                 DrawHelper.drawText(ctx, field_22793, label,
                     tx + (cw - field_22793.method_1727(label)) / 2, tabY + (tabH - 9) / 2, fg, false);
             }
@@ -401,8 +393,9 @@ public abstract class SlothyHubScreenBase extends class_437 {
         }
     }
 
-    private void drawLocalToggle(class_332 ctx, int mx, int my, int footTop) {
+    private void drawLocalToggle(class_332 ctx, int mx, int my, int footTop, float delta) {
         boolean showLocal = SlothyConfig.isShowLocalPacks();
+        localCheckAnim = Ui.tickCheckAnim(localCheckAnim, showLocal, delta);
         String label = "Show local packs";
         localCheckH = 12;
         localCheckW = field_22793.method_1727(label) + 18;
@@ -412,24 +405,23 @@ public abstract class SlothyHubScreenBase extends class_437 {
             && my >= footTop && my < field_22790;
         int box = localCheckX;
         int boxY = localCheckY + 1;
-        ctx.method_25294(box, boxY, box + 10, boxY + 10, col(SURFACE & 0xFFFFFF, lcHov ? 200 : 140));
-        ctx.method_25294(box, boxY, box + 10, boxY + 1, lcHov || showLocal ? ACCENT : BORDER);
-        ctx.method_25294(box, boxY + 9, box + 10, boxY + 10, lcHov || showLocal ? ACCENT : BORDER);
-        ctx.method_25294(box, boxY, box + 1, boxY + 10, lcHov || showLocal ? ACCENT : BORDER);
-        ctx.method_25294(box + 9, boxY, box + 10, boxY + 10, lcHov || showLocal ? ACCENT : BORDER);
-        if (showLocal) {
-            ctx.method_25294(box + 2, boxY + 4, box + 4, boxY + 6, ACCENT);
-            ctx.method_25294(box + 3, boxY + 5, box + 8, boxY + 2, ACCENT);
-        }
+        Ui.drawAnimatedCheckbox(ctx, box, boxY, 10, localCheckAnim, lcHov);
         DrawHelper.drawText(ctx, field_22793, label,
-            box + 14, localCheckY + 2, showLocal ? ACCENT : (lcHov ? TEXT : MUTED), false);
+            box + 14, localCheckY + 2, showLocal ? Ui.COL_ACCENT : (lcHov ? Ui.COL_TEXT : Ui.COL_MUTED), false);
     }
 
     private boolean clickLocalCheckbox(double mx, double my) {
         int footTop = field_22790 - FOOTER;
         if (my < footTop || my >= field_22790) return false;
         if (mx >= localCheckX && mx <= localCheckX + localCheckW) {
-            SlothyConfig.setShowLocalPacks(!SlothyConfig.isShowLocalPacks());
+            boolean was = SlothyConfig.isShowLocalPacks();
+            SlothyConfig.setShowLocalPacks(!was);
+            if (!was) {
+                Ui.spawnSelectionBurst((int) mx, (int) my, Ui.COL_ACCENT);
+                Ui.playSuccess();
+            } else {
+                Ui.playClick();
+            }
             invalidateCache();
             scroll = scrollTarget = 0;
             return true;
@@ -476,11 +468,11 @@ public abstract class SlothyHubScreenBase extends class_437 {
 
     // ── Footer ────────────────────────────────────────────────────────────
 
-    private void drawFooter(class_332 ctx, int mx, int my) {
+    private void drawFooter(class_332 ctx, int mx, int my, float delta) {
         int footTop = field_22790 - FOOTER;
-        ctx.method_25294(0, footTop, field_22789, field_22790, PANEL);
-        ctx.method_25294(0, footTop, field_22789, footTop + 1, BORDER);
-        drawLocalToggle(ctx, mx, my, footTop);
+        ctx.method_25294(0, footTop, field_22789, field_22790, Ui.COL_PANEL);
+        ctx.method_25294(0, footTop, field_22789, footTop + 1, Ui.COL_BORDER);
+        drawLocalToggle(ctx, mx, my, footTop, delta);
     }
 
     // ── Pack list ─────────────────────────────────────────────────────────
@@ -519,9 +511,9 @@ public abstract class SlothyHubScreenBase extends class_437 {
 
         // Fade edges
         ctx.method_25296(cardX, top,      cardX + cardW, top + 14,
-            col(BG & 0xFFFFFF, 255), col(BG & 0xFFFFFF, 0));
+            col(Ui.COL_BG & 0xFFFFFF, 255), col(Ui.COL_BG & 0xFFFFFF, 0));
         ctx.method_25296(cardX, bot - 14, cardX + cardW, bot,
-            col(BG & 0xFFFFFF, 0),   col(BG & 0xFFFFFF, 255));
+            col(Ui.COL_BG & 0xFFFFFF, 0),   col(Ui.COL_BG & 0xFFFFFF, 255));
         ctx.method_44380();
 
         // Scrollbar
@@ -531,8 +523,8 @@ public abstract class SlothyHubScreenBase extends class_437 {
             int trkX = field_22789 - trkW - 4, trkY = top + 8;
             int tmbH = Math.max(24, trkH * listH / totalH);
             int tmbY = trkY + (int)((double)(trkH - tmbH) * scroll / Math.max(1, totalH - listH));
-            ctx.method_25294(trkX, trkY, trkX + trkW, trkY + trkH, col(BORDER & 0xFFFFFF, 100));
-            ctx.method_25294(trkX, tmbY, trkX + trkW, tmbY + tmbH, col(ACCENT & 0xFFFFFF, 180));
+            ctx.method_25294(trkX, trkY, trkX + trkW, trkY + trkH, col(Ui.COL_BORDER & 0xFFFFFF, 100));
+            ctx.method_25294(trkX, tmbY, trkX + trkW, tmbY + tmbH, col(Ui.COL_ACCENT & 0xFFFFFF, 180));
         }
     }
 
@@ -555,70 +547,69 @@ public abstract class SlothyHubScreenBase extends class_437 {
         boolean applied = activeIds.contains(pack.getId());
 
         // Card always has a subtle base background
-        int cardBg = lerp(col(PANEL & 0xFFFFFF, 120), col(SURFACE & 0xFFFFFF, 200), ht);
+        int cardBg = lerp(col(Ui.COL_PANEL & 0xFFFFFF, 120), col(Ui.COL_SURFACE & 0xFFFFFF, 200), ht);
         ctx.method_25294(x, drawY, x + w, drawY + CARD_H, cardBg);
 
         // Left accent stripe — 3px, gradient for applied
         int stripeCol;
-        if (applied) stripeCol = ACCENT;
+        if (applied) stripeCol = Ui.COL_ACCENT;
         else if (pack.isLocal()) stripeCol = col(0x8a6a3a, (int)(100 + 80 * ht));
-        else stripeCol = col(BORDER & 0xFFFFFF, (int)(60 + 140 * ht));
+        else stripeCol = col(Ui.COL_BORDER & 0xFFFFFF, (int)(60 + 140 * ht));
         ctx.method_25294(x, drawY, x + 3, drawY + CARD_H, stripeCol);
 
         // Subtle gradient overlay on hover
         if (ht > 0.02f) {
             ctx.method_25296(x + 3, drawY, x + w / 3, drawY + CARD_H,
-                col(ACCENT & 0xFFFFFF, (int)(8 * ht)), col(ACCENT & 0xFFFFFF, 0));
+                col(Ui.COL_ACCENT & 0xFFFFFF, (int)(8 * ht)), col(Ui.COL_ACCENT & 0xFFFFFF, 0));
         }
 
         // Bottom separator
         ctx.method_25294(x + 3, drawY + CARD_H - 1, x + w, drawY + CARD_H,
-            col(BORDER & 0xFFFFFF, (int)(80 + 80 * ht)));
+            col(Ui.COL_BORDER & 0xFFFFFF, (int)(80 + 80 * ht)));
 
-        // ── Thumbnail ─────────────────────────────────────────────────────
         int tX = x + PAD + 6, tY = drawY + (CARD_H - THUMB) / 2;
-        ctx.method_25294(tX - 1, tY - 1, tX + THUMB + 1, tY + THUMB + 1,
-            col(BORDER & 0xFFFFFF, (int)(120 + 100 * ht)));
-        ctx.method_25294(tX, tY, tX + THUMB, tY + THUMB, col(0x0a1410, 255));
-        Ui.drawPawPrint(ctx, tX + THUMB / 2, tY + THUMB / 2, col(ACCENT & 0xFFFFFF, 40), 0.7f);
-        Thumb thumb = thumbs.get(pack.getId());
-        if (thumb != null) {
-            float fa = Math.min(1f, thumbFadeIn.getOrDefault(pack.getId(), 0f) + delta * 0.12f);
-            thumbFadeIn.put(pack.getId(), fa);
-            DrawHelper.drawTexture(ctx, thumb.id(), tX, tY, 0f, 0f, THUMB, THUMB, THUMB, THUMB);
-        } else {
-            // Placeholder with shimmer
-            float phase = (float)(System.currentTimeMillis() % 2400L) / 2400f;
-            Ui.shimmer(ctx, tX, tY, THUMB, THUMB, phase, col(ACCENT & 0xFFFFFF, 15));
-        }
-        // accent top-border on thumb when applied
-        if (applied)
-            ctx.method_25294(tX - 1, tY - 1, tX + THUMB + 1, tY, col(ACCENT & 0xFFFFFF, 200));
-
-        // ── Text ──────────────────────────────────────────────────────────
         int textX = tX + THUMB + 14;
-        int nameY = drawY + CARD_H / 2 - 11;
+        int badgeY = drawY + CARD_H / 2 - 11;
+        int nameY = badgeY;
 
-        // Badge (LOCAL / HANGING / tag)
+        // Badge fills before custom textures — drawTexture leaves UV state that breaks fills on 1.21.4
         String badge; int badgeBg, badgeFg;
-        if (applied)         { badge = "HANGING";  badgeBg = col(ACCENT & 0xFFFFFF, 35); badgeFg = ACCENT; }
+        if (applied)         { badge = "HANGING";  badgeBg = col(Ui.COL_ACCENT & 0xFFFFFF, 35); badgeFg = Ui.COL_ACCENT; }
         else if (pack.isLocal()) { badge = "LOCAL"; badgeBg = col(0x8a6a3a, 30); badgeFg = col(0xc89a60, 220); }
         else {
             List<String> tags = pack.getTags();
             badge = tags.isEmpty() ? "" : tags.get(0).toUpperCase(Locale.ROOT);
-            badgeBg = col(SURFACE & 0xFFFFFF, 180); badgeFg = MUTED;
+            badgeBg = col(Ui.COL_SURFACE & 0xFFFFFF, 180); badgeFg = Ui.COL_MUTED;
         }
         if (!badge.isEmpty()) {
             int bw = field_22793.method_1727(badge) + 8, bh2 = 10;
-            ctx.method_25294(textX, nameY, textX + bw, nameY + bh2, badgeBg);
-            ctx.method_25294(textX, nameY, textX + bw, nameY + 1, badgeFg);
-            ctx.method_25294(textX, nameY, textX + 1, nameY + bh2, badgeFg);
-            ctx.method_25294(textX + bw - 1, nameY, textX + bw, nameY + bh2, badgeFg);
-            ctx.method_25294(textX, nameY + bh2 - 1, textX + bw, nameY + bh2, col(badgeFg & 0xFFFFFF, 80));
-            DrawHelper.drawText(ctx, field_22793, badge, textX + 4, nameY + 1, badgeFg, false);
-            nameY += bh2 + 3;
+            ctx.method_25294(textX, badgeY, textX + bw, badgeY + bh2, badgeBg);
+            ctx.method_25294(textX, badgeY, textX + bw, badgeY + 1, badgeFg);
+            ctx.method_25294(textX, badgeY, textX + 1, badgeY + bh2, badgeFg);
+            ctx.method_25294(textX + bw - 1, badgeY, textX + bw, badgeY + bh2, badgeFg);
+            ctx.method_25294(textX, badgeY + bh2 - 1, textX + bw, badgeY + bh2, col(badgeFg & 0xFFFFFF, 80));
+            DrawHelper.drawText(ctx, field_22793, badge, textX + 4, badgeY + 1, badgeFg, false);
+            nameY = badgeY + bh2 + 3;
         }
 
+        // ── Thumbnail ─────────────────────────────────────────────────────
+        ctx.method_25294(tX - 1, tY - 1, tX + THUMB + 1, tY + THUMB + 1,
+            col(Ui.COL_BORDER & 0xFFFFFF, (int)(120 + 100 * ht)));
+        ctx.method_25294(tX, tY, tX + THUMB, tY + THUMB, col(0x0a1410, 255));
+        if (applied)
+            ctx.method_25294(tX - 1, tY - 1, tX + THUMB + 1, tY, col(Ui.COL_ACCENT & 0xFFFFFF, 200));
+        Thumb thumb = thumbs.get(pack.getId());
+        if (thumb != null) {
+            float fa = Math.min(1f, thumbFadeIn.getOrDefault(pack.getId(), 0f) + delta * 0.12f);
+            thumbFadeIn.put(pack.getId(), fa);
+            DrawHelper.drawTexture(ctx, thumb.id(), tX, tY, 0f, 0f, THUMB, THUMB, thumb.width(), thumb.height());
+        } else {
+            Ui.drawPawPrint(ctx, tX + THUMB / 2, tY + THUMB / 2, col(Ui.COL_ACCENT & 0xFFFFFF, 40), 0.7f);
+            float phase = (float)(System.currentTimeMillis() % 2400L) / 2400f;
+            Ui.shimmer(ctx, tX, tY, THUMB, THUMB, phase, col(Ui.COL_ACCENT & 0xFFFFFF, 15));
+        }
+
+        // ── Text ──────────────────────────────────────────────────────────
         // Pack name (with shadow for emphasis)
         String name = pack.getName();
         int maxNameW = x + w - BTN_W - 70 - textX;
@@ -628,11 +619,11 @@ public abstract class SlothyHubScreenBase extends class_437 {
             name += "…";
         }
         DrawHelper.drawText(ctx, field_22793, name, textX + 1, nameY + 1, col(0, 60), false);
-        DrawHelper.drawText(ctx, field_22793, name, textX, nameY, TEXT, false);
+        DrawHelper.drawText(ctx, field_22793, name, textX, nameY, Ui.COL_TEXT, false);
 
         // Author + format
         String sub = "by " + pack.getAuthorName() + (pack.isZip() ? "  ·  .zip" : (pack.isLocal() ? "" : "  ·  .rar"));
-        DrawHelper.drawText(ctx, field_22793, sub, textX, nameY + 11, MUTED, false);
+        DrawHelper.drawText(ctx, field_22793, sub, textX, nameY + 11, Ui.COL_MUTED, false);
 
         // ── Star button (non-local only) ───────────────────────────────────
         int btnX = x + w - BTN_W - PAD - 2;
@@ -652,8 +643,8 @@ public abstract class SlothyHubScreenBase extends class_437 {
         boolean hov = mx >= x && mx <= x + 44 && my >= y && my <= y + BTN_H
             && my >= HEADER + TOOLBAR && my < field_22790 - FOOTER;
         boolean starred = pack.isViewerStarred();
-        int starCol = starred ? GOLD : (hov ? col(GOLD & 0xFFFFFF, 200) : MUTED);
-        int bg  = starred ? col(GOLD & 0xFFFFFF, 25) : (hov ? col(GOLD & 0xFFFFFF, 15) : col(SURFACE & 0xFFFFFF, 80));
+        int starCol = starred ? Ui.COL_GOLD : (hov ? col(Ui.COL_GOLD & 0xFFFFFF, 200) : Ui.COL_MUTED);
+        int bg  = starred ? col(Ui.COL_GOLD & 0xFFFFFF, 25) : (hov ? col(Ui.COL_GOLD & 0xFFFFFF, 15) : col(Ui.COL_SURFACE & 0xFFFFFF, 80));
         ctx.method_25294(x, y, x + 44, y + BTN_H, bg);
         ctx.method_25294(x, y, x + 44, y + 1, col(starCol & 0xFFFFFF, 150));
         ctx.method_25294(x, y + BTN_H - 1, x + 44, y + BTN_H, col(starCol & 0xFFFFFF, 80));
@@ -682,20 +673,20 @@ public abstract class SlothyHubScreenBase extends class_437 {
             case DOWNLOADING -> {
                 float p = dlProgressUi.getOrDefault(pack.getId(), 0f);
                 label = (int)(p * 100f) + "%";
-                bg = PANEL; fg = MUTED; top = BORDER;
+                bg = Ui.COL_PANEL; fg = Ui.COL_MUTED; top = Ui.COL_BORDER;
             }
-            case APPLYING -> { label = "APPLYING…"; bg = PANEL; fg = MUTED; top = BORDER; }
+            case APPLYING -> { label = "APPLYING…"; bg = Ui.COL_PANEL; fg = Ui.COL_MUTED; top = Ui.COL_BORDER; }
             case DONE -> {
-                if (hov) { label = "REMOVE"; bg = col(DANGER & 0xFFFFFF, 35); fg = DANGER; top = col(DANGER & 0xFFFFFF, 180); }
-                else       { label = "APPLIED ✓"; bg = col(ACCENT & 0xFFFFFF, 25); fg = ACCENT; top = col(ACCENT & 0xFFFFFF, 160); }
+                if (hov) { label = "REMOVE"; bg = col(Ui.COL_DANGER & 0xFFFFFF, 35); fg = Ui.COL_DANGER; top = col(Ui.COL_DANGER & 0xFFFFFF, 180); }
+                else       { label = "APPLIED"; bg = col(Ui.COL_ACCENT & 0xFFFFFF, 25); fg = Ui.COL_ACCENT; top = col(Ui.COL_ACCENT & 0xFFFFFF, 160); }
             }
-            case ERROR -> { label = "RETRY"; bg = col(DANGER & 0xFFFFFF, 25); fg = DANGER; top = col(DANGER & 0xFFFFFF, 180); }
+            case ERROR -> { label = "RETRY"; bg = col(Ui.COL_DANGER & 0xFFFFFF, 25); fg = Ui.COL_DANGER; top = col(Ui.COL_DANGER & 0xFFFFFF, 180); }
             default -> {
                 label = pack.isLocal() ? "APPLY" : "HANG & APPLY";
                 // Filled solid button
-                bg  = hov ? ACCENT : col(ACCENT & 0xFFFFFF, (int)(40 + 60 * ht));
-                fg  = hov ? BG : lerp(MUTED, TEXT, ht);
-                top = ACCENT;
+                bg  = hov ? Ui.COL_ACCENT : col(Ui.COL_ACCENT & 0xFFFFFF, (int)(40 + 60 * ht));
+                fg  = hov ? Ui.COL_BG : lerp(Ui.COL_MUTED, Ui.COL_TEXT, ht);
+                top = Ui.COL_ACCENT;
             }
         }
 
@@ -711,12 +702,23 @@ public abstract class SlothyHubScreenBase extends class_437 {
         // Progress bar
         if (state == DlState.DOWNLOADING) {
             float p = dlProgressUi.getOrDefault(pack.getId(), 0f);
-            ctx.method_25294(bx + 1, by + BTN_H - 2, bx + 1 + (int)((BTN_W - 2) * p), by + BTN_H - 1, ACCENT);
+            ctx.method_25294(bx + 1, by + BTN_H - 2, bx + 1 + (int)((BTN_W - 2) * p), by + BTN_H - 1, Ui.COL_ACCENT);
         }
 
-        DrawHelper.drawText(ctx, field_22793, label,
-            bx + (BTN_W - field_22793.method_1727(label)) / 2,
-            by + (BTN_H - 9) / 2, fg, false);
+        int textY = by + (BTN_H - 9) / 2;
+        if ("APPLIED".equals(label)) {
+            int checkSize = 10;
+            int gap = 5;
+            int textW = field_22793.method_1727(label);
+            int totalW = textW + gap + checkSize;
+            int tx = bx + (BTN_W - totalW) / 2;
+            DrawHelper.drawText(ctx, field_22793, label, tx, textY, fg, false);
+            Ui.drawCheckIcon(ctx, tx + textW + gap, by + (BTN_H - checkSize) / 2, checkSize, fg);
+        } else {
+            DrawHelper.drawText(ctx, field_22793, label,
+                bx + (BTN_W - field_22793.method_1727(label)) / 2,
+                textY, fg, false);
+        }
 
         if (state == DlState.ERROR && hov) {
             pendingTooltip = dlMsg.getOrDefault(pack.getId(), "Click to retry");
@@ -731,21 +733,21 @@ public abstract class SlothyHubScreenBase extends class_437 {
         int count = (field_22790 - HEADER - TOOLBAR - FOOTER) / CARD_H + 1;
         for (int i = 0; i < count; i++) {
             int y = top + i * CARD_H;
-            ctx.method_25294(x, y, x + w, y + CARD_H, col(PANEL & 0xFFFFFF, 160));
-            ctx.method_25294(x, y, x + 3, y + CARD_H, col(BORDER & 0xFFFFFF, 180));
+            ctx.method_25294(x, y, x + w, y + CARD_H, col(Ui.COL_PANEL & 0xFFFFFF, 160));
+            ctx.method_25294(x, y, x + 3, y + CARD_H, col(Ui.COL_BORDER & 0xFFFFFF, 180));
             int tX = x + PAD + 6, tY = y + (CARD_H - THUMB) / 2;
-            ctx.method_25294(tX, tY, tX + THUMB, tY + THUMB, col(SURFACE & 0xFFFFFF, 160));
+            ctx.method_25294(tX, tY, tX + THUMB, tY + THUMB, col(Ui.COL_SURFACE & 0xFFFFFF, 160));
             int tx = tX + THUMB + 14;
-            ctx.method_25294(tx, y + 18, tx + 16, y + 26, col(BORDER & 0xFFFFFF, 160));
-            ctx.method_25294(tx, y + 30, tx + 110, y + 38, col(SURFACE & 0xFFFFFF, 180));
-            ctx.method_25294(tx, y + 42, tx + 70, y + 49, col(BORDER & 0xFFFFFF, 130));
-            ctx.method_25294(x, y + CARD_H - 1, x + w, y + CARD_H, col(BORDER & 0xFFFFFF, 100));
-            Ui.shimmer(ctx, x, y, w, CARD_H, phase, col(ACCENT & 0xFFFFFF, 14));
+            ctx.method_25294(tx, y + 18, tx + 16, y + 26, col(Ui.COL_BORDER & 0xFFFFFF, 160));
+            ctx.method_25294(tx, y + 30, tx + 110, y + 38, col(Ui.COL_SURFACE & 0xFFFFFF, 180));
+            ctx.method_25294(tx, y + 42, tx + 70, y + 49, col(Ui.COL_BORDER & 0xFFFFFF, 130));
+            ctx.method_25294(x, y + CARD_H - 1, x + w, y + CARD_H, col(Ui.COL_BORDER & 0xFFFFFF, 100));
+            Ui.shimmer(ctx, x, y, w, CARD_H, phase, col(Ui.COL_ACCENT & 0xFFFFFF, 14));
         }
         String msg = "LOADING PACKS…";
         int mw = field_22793.method_1727(msg);
         int cy = top + (field_22790 - HEADER - TOOLBAR - FOOTER) / 2;
-        DrawHelper.drawText(ctx, field_22793, msg, field_22789 / 2 - mw / 2, cy, MUTED, false);
+        DrawHelper.drawText(ctx, field_22793, msg, field_22789 / 2 - mw / 2, cy, Ui.COL_MUTED, false);
     }
 
     // ── Empty state ──────────────────────────────────────────────────────
@@ -754,17 +756,17 @@ public abstract class SlothyHubScreenBase extends class_437 {
         int cy = top + listH / 2 - 5;
         // Subtle icon
         int iconX = field_22789 / 2 - 12, iconY = cy - 22;
-        ctx.method_25294(iconX, iconY, iconX + 24, iconY + 16, col(SURFACE & 0xFFFFFF, 100));
-        ctx.method_25294(iconX + 8, iconY + 4, iconX + 16, iconY + 12, col(BORDER & 0xFFFFFF, 140));
+        ctx.method_25294(iconX, iconY, iconX + 24, iconY + 16, col(Ui.COL_SURFACE & 0xFFFFFF, 100));
+        ctx.method_25294(iconX + 8, iconY + 4, iconX + 16, iconY + 12, col(Ui.COL_BORDER & 0xFFFFFF, 140));
 
         DrawHelper.drawText(ctx, field_22793, head,
-            field_22789 / 2 - field_22793.method_1727(head) / 2, cy, TEXT, false);
+            field_22789 / 2 - field_22793.method_1727(head) / 2, cy, Ui.COL_TEXT, false);
         if (sub != null && !sub.isBlank()) {
             int maxW = Math.min(field_22789 - 60, 420);
             int lineY = cy + 13;
             for (String line : wrapText(sub, maxW)) {
                 DrawHelper.drawText(ctx, field_22793, line,
-                    field_22789 / 2 - field_22793.method_1727(line) / 2, lineY, MUTED, false);
+                    field_22789 / 2 - field_22793.method_1727(line) / 2, lineY, Ui.COL_MUTED, false);
                 lineY += 11;
             }
         }
@@ -786,21 +788,21 @@ public abstract class SlothyHubScreenBase extends class_437 {
         } else { w = Math.min(maxW, 480); h = w * 9 / 16; if (h > maxH) { h = maxH; w = maxH * 16 / 9; } }
         int bx = (field_22789 - w) / 2, by = (field_22790 - h) / 2 - 14;
         // Panel background
-        ctx.method_25294(bx - 4, by - 4, bx + w + 4, by + h + 4, PANEL);
-        ctx.method_25294(bx - 4, by - 4, bx + w + 4, by - 3, ACCENT);
-        ctx.method_25294(bx - 4, by - 3, bx - 3, by + h + 4, BORDER);
-        ctx.method_25294(bx + w + 3, by - 3, bx + w + 4, by + h + 4, BORDER);
-        ctx.method_25294(bx - 4, by + h + 3, bx + w + 4, by + h + 4, BORDER);
-        if (thumb != null) DrawHelper.drawTexture(ctx, thumb.id(), bx, by, 0f, 0f, w, h, w, h);
-        else ctx.method_25294(bx, by, bx + w, by + h, SURFACE);
+        ctx.method_25294(bx - 4, by - 4, bx + w + 4, by + h + 4, Ui.COL_PANEL);
+        ctx.method_25294(bx - 4, by - 4, bx + w + 4, by - 3, Ui.COL_ACCENT);
+        ctx.method_25294(bx - 4, by - 3, bx - 3, by + h + 4, Ui.COL_BORDER);
+        ctx.method_25294(bx + w + 3, by - 3, bx + w + 4, by + h + 4, Ui.COL_BORDER);
+        ctx.method_25294(bx - 4, by + h + 3, bx + w + 4, by + h + 4, Ui.COL_BORDER);
+        if (thumb != null) DrawHelper.drawTexture(ctx, thumb.id(), bx, by, 0f, 0f, w, h, thumb.width(), thumb.height());
+        else ctx.method_25294(bx, by, bx + w, by + h, Ui.COL_SURFACE);
         int ta = (int)(255f * Ui.easeOutCubic(previewT));
         if (ta >= 8) {
             String title = previewPack.getName();
             String sub = "by " + previewPack.getAuthorName() + "  ·  click anywhere to close";
             DrawHelper.drawText(ctx, field_22793, title,
-                field_22789 / 2 - field_22793.method_1727(title) / 2, by + h + 10, col(TEXT & 0xFFFFFF, ta), false);
+                field_22789 / 2 - field_22793.method_1727(title) / 2, by + h + 10, col(Ui.COL_TEXT & 0xFFFFFF, ta), false);
             DrawHelper.drawText(ctx, field_22793, sub,
-                field_22789 / 2 - field_22793.method_1727(sub) / 2, by + h + 21, col(MUTED & 0xFFFFFF, ta), false);
+                field_22789 / 2 - field_22793.method_1727(sub) / 2, by + h + 21, col(Ui.COL_MUTED & 0xFFFFFF, ta), false);
         }
     }
 
@@ -815,13 +817,13 @@ public abstract class SlothyHubScreenBase extends class_437 {
         int tx = mx + 12, ty = my - bh - 5;
         if (tx + bw > field_22789 - 4) tx = field_22789 - 4 - bw;
         if (ty < 4) ty = my + 16;
-        ctx.method_25294(tx, ty, tx + bw, ty + bh, col(PANEL & 0xFFFFFF, 235));
-        ctx.method_25294(tx, ty, tx + bw, ty + 1, ACCENT);
-        ctx.method_25294(tx, ty + bh - 1, tx + bw, ty + bh, BORDER);
-        ctx.method_25294(tx, ty, tx + 1, ty + bh, BORDER);
-        ctx.method_25294(tx + bw - 1, ty, tx + bw, ty + bh, BORDER);
+        ctx.method_25294(tx, ty, tx + bw, ty + bh, col(Ui.COL_PANEL & 0xFFFFFF, 235));
+        ctx.method_25294(tx, ty, tx + bw, ty + 1, Ui.COL_ACCENT);
+        ctx.method_25294(tx, ty + bh - 1, tx + bw, ty + bh, Ui.COL_BORDER);
+        ctx.method_25294(tx, ty, tx + 1, ty + bh, Ui.COL_BORDER);
+        ctx.method_25294(tx + bw - 1, ty, tx + bw, ty + bh, Ui.COL_BORDER);
         int ly = ty + 4;
-        for (String s : lines) { DrawHelper.drawText(ctx, field_22793, s, tx + 7, ly, TEXT, false); ly += 11; }
+        for (String s : lines) { DrawHelper.drawText(ctx, field_22793, s, tx + 7, ly, Ui.COL_TEXT, false); ly += 11; }
     }
 
     // ── Input ─────────────────────────────────────────────────────────────
@@ -839,7 +841,7 @@ public abstract class SlothyHubScreenBase extends class_437 {
                         case 1 -> { class_310.method_1551().method_1507(new TexturePickerScreen(this)); return true; }
                         case 2 -> { class_310.method_1551().method_1507(new PackLibraryScreen(this)); return true; }
                         case 3 -> { class_310.method_1551().method_1507(new KillEffectsScreen(this)); return true; }
-                        case 4 -> { class_310.method_1551().method_1507(new FeatherProfilesScreen(this)); return true; }
+                        case 4 -> { class_310.method_1551().method_1507(new GuiThemeScreen(this)); return true; }
                     }
                 }
             }

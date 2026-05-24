@@ -2,32 +2,23 @@ package com.slothyhub.cit;
 
 import com.slothyhub.SlothyConfig;
 import com.slothyhub.SlothyHubMod;
+import com.slothyhub.builder.ResourceScanHelper;
+import com.slothyhub.compat.Identifiers;
 import net.fabricmc.fabric.api.resource.SimpleSynchronousResourceReloadListener;
 import net.minecraft.class_2960;
 import net.minecraft.class_3300;
 
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 
-/**
- * Fabric resource reload listener — re-parses CIT rules whenever resource packs change.
- *
- * Scans ALL active resource packs for OptiFine / CIT Resewn compatible .properties files.
- * The files live at: assets/<namespace>/optifine/cit/**  (namespace is usually "minecraft")
- *
- * IMPORTANT: ResourceManager.findResources(String namespace, Predicate<Identifier> pathFilter)
- *            The first argument is the NAMESPACE ("minecraft"), NOT a path prefix.
- *            We then filter the identifier paths to find cit/ sub-paths.
- */
 public final class CitResourceReloadListener implements SimpleSynchronousResourceReloadListener {
 
-    private static final class_2960 ID = class_2960.method_60655("slothyhub", "cit_listener");
+    private static final class_2960 ID = Identifiers.of("slothyhub", "cit_listener");
 
-    /** Path prefixes within a namespace that contain CIT .properties files. */
     private static final String[] CIT_PATH_PREFIXES = {
         "optifine/cit/", "citresewn/cit/", "mcpatcher/cit/", "cit/"
     };
@@ -37,44 +28,44 @@ public final class CitResourceReloadListener implements SimpleSynchronousResourc
 
     @Override
     public void method_14491(class_3300 manager) {
+        reloadCit(manager);
+    }
+
+    static void reloadCit(class_3300 manager) {
         if (!SlothyConfig.isCitEnabled()) {
             CitRuleSet.setActive(new CitRuleSet(List.of()));
+            CitVirtualTextures.clear();
             return;
         }
+        if (manager == null) return;
 
         List<CitRule> rules = new ArrayList<>();
         int scanned = 0;
-
-        Set<String> namespaces = new LinkedHashSet<>();
-        namespaces.add("minecraft");
-        namespaces.add("optifine");
-        namespaces.add("citresewn");
-        try {
-            namespaces.addAll(manager.method_14487());
-        } catch (Exception ignored) {}
+        Set<String> namespaces = ResourceScanHelper.namespaces(manager);
 
         for (String namespace : namespaces) {
             try {
-                // findResources(namespace, pathPredicate) -> Map<Identifier, Resource>
-                // First arg = namespace ("minecraft"), second = predicate on the full identifier
-                Map<class_2960, ?> found = manager.method_14488(namespace, id -> {
-                    String path = id.method_12832(); // Identifier#getPath() — not getNamespace()
-                    if (!path.endsWith(".properties")) return false;
-                    for (String prefix : CIT_PATH_PREFIXES) {
-                        if (path.startsWith(prefix)) return true;
-                    }
-                    return false;
-                });
+                Map<class_2960, ?> found = ResourceScanHelper.findResources(
+                    manager, namespace, citPropertiesFilter());
 
                 for (Map.Entry<class_2960, ?> entry : found.entrySet()) {
                     scanned++;
                     class_2960 rid = entry.getKey();
                     try {
-                        InputStream in = openResource(entry.getValue());
-                        if (in != null) {
-                            try (in) {
-                                CitRule rule = CitRuleParser.parse(rid, in);
-                                if (rule != null) rules.add(rule);
+                        InputStream in = ResourceScanHelper.openResource(entry.getValue());
+                        if (in == null) {
+                            in = ResourceScanHelper.openIdentifier(manager, rid);
+                        }
+                        if (in == null) {
+                            SlothyHubMod.LOGGER.warn("CIT: could not open {}", rid);
+                            continue;
+                        }
+                        try (InputStream stream = in) {
+                            CitRule rule = CitRuleParser.parse(rid, stream);
+                            if (rule != null) {
+                                rules.add(rule);
+                            } else {
+                                SlothyHubMod.LOGGER.warn("CIT: skipped {} (unsupported or invalid rule)", rid);
                             }
                         }
                     } catch (Exception e) {
@@ -86,35 +77,38 @@ public final class CitResourceReloadListener implements SimpleSynchronousResourc
             }
         }
 
-        CitRuleSet.setActive(new CitRuleSet(rules));
+        CitRuleSet.setActive(new CitRuleSet(CitRuleSet.dedupe(rules)));
         SlothyHubMod.LOGGER.info("CIT: scanned {} properties files, loaded {} rules.", scanned, rules.size());
         for (CitRule r : rules) {
             SlothyHubMod.LOGGER.info("CIT: rule {} items={} name='{}' texture={}",
                 r.id, r.items, r.nameMatcher, r.texture);
         }
-        CitVirtualTextures.rebuild(manager, CitRuleSet.active());
+        scheduleSpriteRebuild(manager);
     }
 
-    /** Opens a Resource's InputStream via reflection (API varies slightly across MC versions). */
-    private static InputStream openResource(Object resource) {
-        if (resource == null) return null;
-        // Try known intermediary/named method names
-        for (String name : new String[]{"method_14482", "open", "getInputStream", "getReader"}) {
-            try {
-                java.lang.reflect.Method m = resource.getClass().getMethod(name);
-                Object result = m.invoke(resource);
-                if (result instanceof InputStream is) return is;
-            } catch (Exception ignored) {}
+    /** Atlas stitch finishes after this listener — rebuild sprites on the next client tick. */
+    private static void scheduleSpriteRebuild(class_3300 manager) {
+        net.minecraft.class_310 mc = net.minecraft.class_310.method_1551();
+        CitRuleSet active = CitRuleSet.active();
+        Runnable rebuild = () -> {
+            class_3300 live = manager != null ? manager : ResourceScanHelper.resourceManager();
+            if (live != null) CitVirtualTextures.rebuild(live, active);
+        };
+        if (mc != null) {
+            mc.execute(() -> mc.execute(rebuild));
+        } else {
+            rebuild.run();
         }
-        // Fallback: any declared no-arg method returning InputStream
-        for (java.lang.reflect.Method m : resource.getClass().getDeclaredMethods()) {
-            if (m.getParameterCount() == 0 && InputStream.class.isAssignableFrom(m.getReturnType())) {
-                try {
-                    m.setAccessible(true);
-                    return (InputStream) m.invoke(resource);
-                } catch (Exception ignored) {}
+    }
+
+    private static Predicate<class_2960> citPropertiesFilter() {
+        return id -> {
+            String path = id.method_12832();
+            if (!path.endsWith(".properties")) return false;
+            for (String prefix : CIT_PATH_PREFIXES) {
+                if (path.startsWith(prefix)) return true;
             }
-        }
-        return null;
+            return false;
+        };
     }
 }

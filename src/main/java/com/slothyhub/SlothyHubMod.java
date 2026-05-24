@@ -1,6 +1,9 @@
 package com.slothyhub;
 
 import com.slothyhub.cit.CitEngine;
+import com.slothyhub.compat.Identifiers;
+import com.slothyhub.compat.McVersion;
+import com.slothyhub.compat.TickDeltaCompat;
 import com.slothyhub.local.LocalPackManager;
 import com.slothyhub.ui.Ui;
 import java.lang.reflect.Constructor;
@@ -9,8 +12,10 @@ import java.lang.reflect.Modifier;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.EndTick;
+import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
@@ -23,7 +28,6 @@ import net.minecraft.class_3468;
 import net.minecraft.class_433;
 import net.minecraft.class_442;
 import net.minecraft.class_4185;
-import net.minecraft.class_9779;
 import net.minecraft.class_3675.class_307;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,19 +40,34 @@ public class SlothyHubMod implements ClientModInitializer {
 
     private static class_304 openKey;
     private static int lastKillCount = -1;
-    private static final Method TICK_DELTA_METHOD;
 
     @Override
     public void onInitializeClient() {
         SlothyConfig.load();
+        Ui.reloadTheme();
         LocalPackManager.init();
         CitEngine.init();
+        com.slothyhub.ui.GuiAssets.init();
         PackMcmetaRepair.scanAndFixAsync();
 
-        LOGGER.info("SlothyHub loaded. Server: {}",
-            SlothyConfig.isConfigured() ? SlothyConfig.getServerUrl() : "(unset)");
+        ClientLifecycleEvents.CLIENT_STARTED.register(client ->
+            client.execute(PackDownloader::syncAppliedPacks));
 
-        openKey = createKeyBinding("key.slothyhub.open", class_307.field_1668, 72, "category.slothyhub");
+        SlothyHubMod.LOGGER.info("SlothyHub loaded. MC {} | pack_format: {}",
+            McVersion.current(),
+            PackMetaUtil.packFormatForCurrentGame());
+
+        openKey = KeyBindingHelper.registerKeyBinding(
+            createKeyBinding("key.slothyhub.open", class_307.field_1668, 72, "category.slothyhub"));
+
+        ClientReceiveMessageEvents.GAME.register((message, overlay) -> {
+            if (!SlothyConfig.isKillEffectEnabled()) return;
+            String plain = message.getString().toLowerCase(java.util.Locale.ROOT);
+            if (plain.contains("you killed") || plain.contains("was slain by you")
+                || plain.contains("was killed by you") || plain.contains("you have killed")) {
+                Ui.onKill();
+            }
+        });
 
         ClientTickEvents.END_CLIENT_TICK.register((EndTick) client -> {
             if (openKey != null) {
@@ -79,7 +98,7 @@ public class SlothyHubMod implements ClientModInitializer {
                 if (mc.field_1724 != null) {
                     int w = mc.method_22683().method_4486();
                     int h = mc.method_22683().method_4502();
-                    float delta = getTickDeltaCompat(tickCounter);
+                    float delta = TickDeltaCompat.delta(tickCounter);
                     Ui.renderKillEffect(drawContext, w, h, delta);
                     Ui.renderTotemPop(drawContext, w, h, delta);
                 }
@@ -117,13 +136,6 @@ public class SlothyHubMod implements ClientModInitializer {
         });
     }
 
-    private static float getTickDeltaCompat(Object tickCounter) {
-        if (TICK_DELTA_METHOD != null) {
-            try { return (Float) TICK_DELTA_METHOD.invoke(tickCounter, true); } catch (Exception ignored) {}
-        }
-        return 0f;
-    }
-
     private static class_304 createKeyBinding(String id, class_307 type, int code, String category) {
         for (Constructor<?> ctor : class_304.class.getDeclaredConstructors()) {
             Class<?>[] p = ctor.getParameterTypes();
@@ -139,7 +151,7 @@ public class SlothyHubMod implements ClientModInitializer {
                     }
                     if (createM != null) {
                         createM.setAccessible(true);
-                        Object cat = createM.invoke(null, class_2960.method_60655("slothyhub", category));
+                        Object cat = createM.invoke(null, Identifiers.of("slothyhub", category));
                         ctor.setAccessible(true);
                         return (class_304) ctor.newInstance(id, type, code, cat);
                     }
@@ -149,17 +161,5 @@ public class SlothyHubMod implements ClientModInitializer {
             }
         }
         return new class_304(id, type, code, category);
-    }
-
-    static {
-        Method found = null;
-        try {
-            for (Method m : class_9779.class.getMethods()) {
-                if (m.getParameterCount() == 1 && m.getParameterTypes()[0] == boolean.class && m.getReturnType() == float.class) {
-                    found = m; break;
-                }
-            }
-        } catch (Exception ignored) {}
-        TICK_DELTA_METHOD = found;
     }
 }

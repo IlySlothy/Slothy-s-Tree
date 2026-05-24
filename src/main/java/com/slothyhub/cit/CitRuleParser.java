@@ -37,23 +37,31 @@ public final class CitRuleParser {
             return null;
         }
 
-        // Only handle "item" type (texture replacement) for now
+        // Item + armor piece rules (CIT Resewn / OptiFine compatible subset)
         String type = props.getProperty("type", "item");
-        if (!type.equalsIgnoreCase("item") && !type.equalsIgnoreCase("items")) {
+        if (!isSupportedType(type)) {
             SlothyHubMod.LOGGER.debug("CIT: skipping unsupported type '{}' in {}", type, rid);
             return null;
         }
 
-        // Items this rule applies to
+        // Items this rule applies to (infer from path when missing — common in armor folders)
         String itemsRaw = props.getProperty("items", props.getProperty("matchItems", ""));
+        List<String> items;
         if (itemsRaw.isBlank()) {
-            SlothyHubMod.LOGGER.warn("CIT: no 'items' in {}", rid);
-            return null;
+            items = inferItemsFromPath(rid, type);
+            if (items.isEmpty()) {
+                SlothyHubMod.LOGGER.warn("CIT: no 'items' in {}", rid);
+                return null;
+            }
+        } else {
+            items = expandItems(itemsRaw, rid, type);
         }
-        List<String> items = List.of(itemsRaw.trim().split("\\s+"));
 
         // Texture / model overrides
         String texture = props.getProperty("texture", props.getProperty("texture.bow", ""));
+        if (texture.isBlank()) {
+            texture = firstTextureProperty(props);
+        }
         String model   = props.getProperty("model", "");
 
         // Conditions
@@ -119,6 +127,12 @@ public final class CitRuleParser {
         if (bodyLower.equals(expectedLower)) return prefix + expected;
 
         // Corrupted concat (multiple sword names run together) — use filename-derived name
+        if (countEmbeddedSwordNames(bodyLower) > 1) {
+            SlothyHubMod.LOGGER.warn("CIT: repaired multi-name field in {} ('{}' → '{}')",
+                rid, body, expected);
+            return prefix + expected;
+        }
+
         if (bodyLower.contains(expectedLower) && body.length() > expected.length() + 2) {
             SlothyHubMod.LOGGER.warn("CIT: repaired corrupted name in {} ('{}' → '{}')",
                 rid, body, expected);
@@ -198,5 +212,80 @@ public final class CitRuleParser {
             out.add(new CitRule.NbtCondition(nbtPath, pattern));
         }
         return out;
+    }
+
+    private static boolean isSupportedType(String type) {
+        if (type == null || type.isBlank()) return true;
+        String t = type.trim().toLowerCase(Locale.ROOT);
+        return t.equals("item") || t.equals("items") || t.equals("armor");
+    }
+
+    /** Infer item ids from armor/sword folder layout when {@code items=} is omitted. */
+    private static List<String> inferItemsFromPath(class_2960 rid, String type) {
+        String path = rid.method_12832().toLowerCase(Locale.ROOT);
+        String slot = armorSlotFromPath(path);
+        if (slot != null) {
+            String material = armorMaterialFromPath(path);
+            return List.of(material + "_" + slot);
+        }
+        if ("armor".equalsIgnoreCase(type)) {
+            return List.of();
+        }
+        return List.of();
+    }
+
+    private static String armorSlotFromPath(String path) {
+        if (path.endsWith("/boots.properties") || path.endsWith("boots.properties")) return "boots";
+        if (path.endsWith("/helmet.properties") || path.endsWith("helmet.properties")) return "helmet";
+        if (path.endsWith("/chestplate.properties") || path.endsWith("chestplate.properties")) return "chestplate";
+        if (path.endsWith("/leggings.properties") || path.endsWith("leggings.properties")) return "leggings";
+        return null;
+    }
+
+    private static String armorMaterialFromPath(String path) {
+        if (path.contains("leather")) return "leather";
+        if (path.contains("chain")) return "chainmail";
+        if (path.contains("iron")) return "iron";
+        if (path.contains("gold")) return "golden";
+        if (path.contains("diamond")) return "diamond";
+        // Hypixel-style tier folders use netherite armor with custom textures
+        return "netherite";
+    }
+
+    private static List<String> expandItems(String itemsRaw, class_2960 rid, String type) {
+        String path = rid.method_12832().toLowerCase(Locale.ROOT);
+        String slot = armorSlotFromPath(path);
+        String[] tokens = itemsRaw.trim().split("\\s+");
+        List<String> out = new ArrayList<>();
+        for (String token : tokens) {
+            if (token.isBlank()) continue;
+            if (token.contains("_") || token.contains(":")) {
+                out.add(token);
+                continue;
+            }
+            if (slot != null) {
+                out.add(normalizeMaterial(token) + "_" + slot);
+            } else {
+                out.add(token);
+            }
+        }
+        return out.isEmpty() ? List.of(itemsRaw.trim()) : out;
+    }
+
+    private static String normalizeMaterial(String material) {
+        return switch (material.toLowerCase(Locale.ROOT)) {
+            case "gold" -> "golden";
+            case "chain" -> "chainmail";
+            default -> material.toLowerCase(Locale.ROOT);
+        };
+    }
+
+    private static String firstTextureProperty(Properties props) {
+        for (String key : props.stringPropertyNames()) {
+            if (!key.startsWith("texture")) continue;
+            String value = props.getProperty(key, "").trim();
+            if (!value.isBlank()) return value;
+        }
+        return "";
     }
 }

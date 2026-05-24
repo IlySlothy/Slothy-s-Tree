@@ -7,17 +7,24 @@ import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import net.minecraft.class_1011;
 import net.minecraft.class_1043;
+import net.minecraft.class_1058;
 import net.minecraft.class_1921;
 import net.minecraft.class_2561;
 import net.minecraft.class_2960;
+import net.minecraft.class_310;
 import net.minecraft.class_327;
 import net.minecraft.class_332;
 import net.minecraft.class_5481;
+import net.minecraft.class_7368;
+import net.minecraft.class_7764;
+import net.minecraft.class_7771;
 
 public final class DrawHelper {
    private static final Method DRAW_TEXT_STRING = resolveDrawTextSixArg(String.class);
@@ -33,8 +40,119 @@ public final class DrawHelper {
    private static final Method MAT_POP;
    private static final Method MAT_TRANSLATE;
    private static final Method MAT_SCALE;
+   private static final Method FLUSH_DRAW;
+   /** 1.21.4–1.21.7: avoid pipeline blit — sprite/region blit + flush between fill and text. */
+   private static final boolean LEGACY_GUI_FLUSH = McVersion.below("1.21.8");
+   private static final Map<class_2960, class_1058> GUI_SPRITES = new ConcurrentHashMap<>();
+   private static final Function<class_2960, Object> LEGACY_RENDER_LAYER = resolveLegacyRenderLayer();
+   private static final Method LEGACY_REGION_BLIT = resolveLegacyRegionBlit();
+   private static final Method LEGACY_BLIT_SPRITE = resolveBlitSpriteMethod(true);
+   private static final Method MODERN_BLIT_SPRITE = resolveBlitSpriteMethod(false);
 
    private DrawHelper() {
+   }
+
+   private static Function<class_2960, Object> resolveLegacyRenderLayer() {
+      Method guiTex = findGuiTexturedRenderLayerMethod();
+      if (guiTex == null) return id -> null;
+      return id -> {
+         try {
+            return guiTex.invoke(null, id);
+         } catch (ReflectiveOperationException e) {
+            return null;
+         }
+      };
+   }
+
+   /** MC 1.21.4–1.21.7 {@code DrawContext.method_25302} — full-texture UV scaling. */
+   private static Method resolveLegacyRegionBlit() {
+      try {
+         Method m = class_332.class.getMethod(
+            "method_25302",
+            Function.class,
+            class_2960.class,
+            int.class,
+            int.class,
+            float.class,
+            float.class,
+            int.class,
+            int.class,
+            int.class,
+            int.class,
+            int.class,
+            int.class
+         );
+         m.setAccessible(true);
+         return m;
+      } catch (ReflectiveOperationException e) {
+         return null;
+      }
+   }
+
+   /** {@code DrawContext.method_52709} — draws via sprite UVs (works for dynamic textures). */
+   private static Method resolveBlitSpriteMethod(boolean legacyFunctionFirst) {
+      for (Method m : class_332.class.getMethods()) {
+         if (!"method_52709".equals(m.getName()) || m.getParameterCount() != 6) continue;
+         Class<?>[] p = m.getParameterTypes();
+         if (p[1] != class_1058.class || p[2] != int.class) continue;
+         if (legacyFunctionFirst && Function.class.isAssignableFrom(p[0])) {
+            m.setAccessible(true);
+            return m;
+         }
+         if (!legacyFunctionFirst && !Function.class.isAssignableFrom(p[0]) && p[0] != class_2960.class) {
+            m.setAccessible(true);
+            return m;
+         }
+      }
+      return null;
+   }
+
+   private static class_1058 createFullSprite(class_2960 id, class_1011 img) {
+      if (id == null || img == null) return null;
+      try {
+         int w = Math.max(1, img.method_4307());
+         int h = Math.max(1, img.method_4323());
+         class_7764 contents = new class_7764(id, new class_7771(w, h), img, class_7368.field_38688);
+         var ctor = class_1058.class.getDeclaredConstructor(
+            class_2960.class, class_7764.class, int.class, int.class, int.class, int.class);
+         ctor.setAccessible(true);
+         return ctor.newInstance(id, contents, w, h, 0, 0);
+      } catch (Throwable ignored) {
+         return null;
+      }
+   }
+
+   private static void invokeLegacyRegionBlit(
+      class_332 ctx,
+      class_2960 id,
+      int x,
+      int y,
+      float u,
+      float v,
+      int width,
+      int height,
+      int texW,
+      int texH
+   ) throws ReflectiveOperationException {
+      if (LEGACY_REGION_BLIT == null || LEGACY_RENDER_LAYER == null) return;
+      int tw = Math.max(1, texW);
+      int th = Math.max(1, texH);
+      LEGACY_REGION_BLIT.invoke(ctx, LEGACY_RENDER_LAYER, id, x, y, u, v, width, height, tw, th, tw, th);
+   }
+
+   private static void invokeSpriteBlit(class_332 ctx, class_1058 sprite, int x, int y, int width, int height)
+      throws ReflectiveOperationException {
+      if (sprite == null || width <= 0 || height <= 0) return;
+      if (LEGACY_GUI_FLUSH) {
+         if (LEGACY_BLIT_SPRITE == null || LEGACY_RENDER_LAYER == null) return;
+         LEGACY_BLIT_SPRITE.invoke(ctx, LEGACY_RENDER_LAYER, sprite, x, y, width, height);
+      } else if (MODERN_BLIT_SPRITE != null && DRAW_TEXTURE_FIRST_ARG != null) {
+         MODERN_BLIT_SPRITE.invoke(ctx, DRAW_TEXTURE_FIRST_ARG, sprite, x, y, width, height);
+      }
+   }
+
+   private static int opaqueTextColor(int color) {
+      return (color & 0xFFFFFF) | 0xFF000000;
    }
 
    private static boolean matchesTextureGridSignature(Class<?>[] p) {
@@ -67,6 +185,25 @@ public final class DrawHelper {
    }
 
    private static Method resolveDrawTextSixArg(Class<?> textArg) {
+      List<String> preferred = new ArrayList<>();
+      if (textArg == String.class) {
+         preferred.add("method_51433");
+      } else if (textArg == class_5481.class) {
+         preferred.add("method_51430");
+      } else if (textArg == class_2561.class) {
+         preferred.add("method_51439");
+      }
+      preferred.add("drawText");
+
+      for (String name : preferred) {
+         try {
+            Method m = class_332.class.getMethod(name, class_327.class, textArg, int.class, int.class, int.class, boolean.class);
+            m.setAccessible(true);
+            return m;
+         } catch (ReflectiveOperationException ignored) {
+         }
+      }
+
       List<Method> found = new ArrayList<>();
 
       for (Method m : class_332.class.getMethods()) {
@@ -102,13 +239,15 @@ public final class DrawHelper {
    }
 
    private static Method findGuiTexturedRenderLayerMethod() {
-      try {
-         Method exact = class_1921.class.getMethod("getGuiTextured", class_2960.class);
-         if (Modifier.isStatic(exact.getModifiers()) && class_1921.class.isAssignableFrom(exact.getReturnType())) {
-            exact.setAccessible(true);
-            return exact;
+      for (String name : new String[]{"getGuiTextured", "method_65214", "method_65213"}) {
+         try {
+            Method exact = class_1921.class.getMethod(name, class_2960.class);
+            if (Modifier.isStatic(exact.getModifiers()) && class_1921.class.isAssignableFrom(exact.getReturnType())) {
+               exact.setAccessible(true);
+               return exact;
+            }
+         } catch (ReflectiveOperationException ignored) {
          }
-      } catch (ReflectiveOperationException var5) {
       }
 
       List<Method> cands = new ArrayList<>();
@@ -277,6 +416,12 @@ public final class DrawHelper {
                      if (v != null) {
                         int sc = scorePipelineForGuiTextured(v);
                         String fn = fxx.getName();
+                        if (fn.contains("GUI_TEXTURED") || fn.equals("field_53147")) {
+                           sc += 200;
+                        } else if (fn.contains("GUI") && fn.contains("TEXTURED")) {
+                           sc += 120;
+                        }
+
                         if (sc > bestScore || sc == bestScore && (bestField == null || fn.compareTo(bestField) < 0)) {
                            bestScore = sc;
                            best = v;
@@ -333,6 +478,34 @@ public final class DrawHelper {
       return new Object[]{null, null};
    }
 
+   private static Method resolveFlushDraw() {
+      List<String> names = McVersion.atLeast("1.21.8")
+         ? List.of("drawDeferredElements", "method_73199", "draw", "method_51452")
+         : List.of("draw", "method_51452", "drawDeferredElements", "method_73199");
+
+      for (String name : names) {
+         try {
+            Method m = class_332.class.getMethod(name);
+            if (m.getReturnType() == void.class && m.getParameterCount() == 0) {
+               m.setAccessible(true);
+               return m;
+            }
+         } catch (ReflectiveOperationException ignored) {
+         }
+      }
+
+      return null;
+   }
+
+   public static void flushDraw(class_332 ctx) {
+      if (FLUSH_DRAW != null && ctx != null) {
+         try {
+            FLUSH_DRAW.invoke(ctx);
+         } catch (ReflectiveOperationException ignored) {
+         }
+      }
+   }
+
    private static Object[] resolveNativeTextureCtor() {
       for (Constructor<?> c : class_1043.class.getDeclaredConstructors()) {
          Class<?>[] p = c.getParameterTypes();
@@ -362,15 +535,39 @@ public final class DrawHelper {
    }
 
    public static void drawText(class_332 ctx, class_327 tr, String text, int x, int y, int color, boolean shadow) {
-      invokeDrawText(DRAW_TEXT_STRING, ctx, tr, text, x, y, color, shadow);
+      int c = LEGACY_GUI_FLUSH ? opaqueTextColor(color) : color;
+      if (LEGACY_GUI_FLUSH) {
+         flushDraw(ctx);
+      }
+
+      invokeDrawText(DRAW_TEXT_STRING, ctx, tr, text, x, y, c, shadow);
+      if (LEGACY_GUI_FLUSH) {
+         flushDraw(ctx);
+      }
    }
 
    public static void drawText(class_332 ctx, class_327 tr, class_2561 text, int x, int y, int color, boolean shadow) {
-      invokeDrawText(DRAW_TEXT_TEXT, ctx, tr, text, x, y, color, shadow);
+      int c = LEGACY_GUI_FLUSH ? opaqueTextColor(color) : color;
+      if (LEGACY_GUI_FLUSH) {
+         flushDraw(ctx);
+      }
+
+      invokeDrawText(DRAW_TEXT_TEXT, ctx, tr, text, x, y, c, shadow);
+      if (LEGACY_GUI_FLUSH) {
+         flushDraw(ctx);
+      }
    }
 
    public static void drawText(class_332 ctx, class_327 tr, class_5481 text, int x, int y, int color, boolean shadow) {
-      invokeDrawText(DRAW_TEXT_ORDERED, ctx, tr, text, x, y, color, shadow);
+      int c = LEGACY_GUI_FLUSH ? opaqueTextColor(color) : color;
+      if (LEGACY_GUI_FLUSH) {
+         flushDraw(ctx);
+      }
+
+      invokeDrawText(DRAW_TEXT_ORDERED, ctx, tr, text, x, y, c, shadow);
+      if (LEGACY_GUI_FLUSH) {
+         flushDraw(ctx);
+      }
    }
 
    public static void drawTextWithShadow(class_332 ctx, class_327 tr, String text, int x, int y, int color) {
@@ -388,12 +585,15 @@ public final class DrawHelper {
    public static class_1043 createNativeTexture(String textureName, class_1011 image) {
       if (NATIVE_TEX_CTOR != null) {
          try {
+            class_1043 tex;
             if (NATIVE_TEX_NEEDS_NAME) {
                Supplier<String> nameSupplier = () -> textureName;
-               return (class_1043)NATIVE_TEX_CTOR.newInstance(nameSupplier, image);
+               tex = (class_1043)NATIVE_TEX_CTOR.newInstance(nameSupplier, image);
+            } else {
+               tex = (class_1043)NATIVE_TEX_CTOR.newInstance(image);
             }
-
-            return (class_1043)NATIVE_TEX_CTOR.newInstance(image);
+            uploadNativeTexture(tex);
+            return tex;
          } catch (ReflectiveOperationException var3) {
          }
       }
@@ -401,21 +601,93 @@ public final class DrawHelper {
       return null;
    }
 
+   /** Upload NativeImage-backed texture to GPU (required before register/bind on 1.21.4). */
+   public static void uploadNativeTexture(class_1043 tex) {
+      if (tex != null) {
+         try {
+            tex.method_4524();
+         } catch (Exception ignored) {
+         }
+      }
+   }
+
+   /** Upload and register a dynamic GUI texture with the client texture manager. */
+   public static void registerDynamicTexture(class_2960 id, class_1043 tex) {
+      class_1011 img = null;
+      if (tex != null) {
+         try {
+            img = tex.method_4525();
+         } catch (Exception ignored) {
+         }
+      }
+      registerDynamicTexture(id, tex, img);
+   }
+
+   /** Registers texture + caches a full-UV sprite for {@link #drawTexture}. */
+   public static void registerDynamicTexture(class_2960 id, class_1043 tex, class_1011 img) {
+      if (id == null || tex == null) return;
+      class_310 mc = class_310.method_1551();
+      if (mc == null || mc.method_1531() == null) return;
+      uploadNativeTexture(tex);
+      mc.method_1531().method_4616(id, tex);
+      class_1011 source = img;
+      if (source == null) {
+         try {
+            source = tex.method_4525();
+         } catch (Exception ignored) {
+         }
+      }
+      if (source != null) {
+         class_1058 sprite = createFullSprite(id, source);
+         if (sprite != null) {
+            GUI_SPRITES.put(id, sprite);
+         }
+      }
+   }
+
    public static void drawTexture(class_332 ctx, class_2960 id, int x, int y, float u, float v, int width, int height, int texW, int texH) {
+      if (ctx == null || id == null || width <= 0 || height <= 0) return;
+      int tw = Math.max(1, texW);
+      int th = Math.max(1, texH);
+
+      if (LEGACY_GUI_FLUSH) {
+         flushDraw(ctx);
+      }
+
+      class_1058 sprite = GUI_SPRITES.get(id);
+      if (sprite != null && u == 0f && v == 0f) {
+         try {
+            invokeSpriteBlit(ctx, sprite, x, y, width, height);
+            flushDraw(ctx);
+            return;
+         } catch (ReflectiveOperationException ignored) {
+         }
+      }
+
+      if (LEGACY_GUI_FLUSH && LEGACY_REGION_BLIT != null) {
+         try {
+            invokeLegacyRegionBlit(ctx, id, x, y, u, v, width, height, tw, th);
+         } catch (ReflectiveOperationException ignored) {
+         }
+         flushDraw(ctx);
+         return;
+      }
+
       if (DRAW_TEXTURE_METHOD != null && DRAW_TEXTURE_FIRST_ARG != null) {
          try {
             int pc = DRAW_TEXTURE_METHOD.getParameterCount();
             if (pc == 10) {
-               DRAW_TEXTURE_METHOD.invoke(ctx, DRAW_TEXTURE_FIRST_ARG, id, x, y, u, v, width, height, texW, texH);
+               DRAW_TEXTURE_METHOD.invoke(ctx, DRAW_TEXTURE_FIRST_ARG, id, x, y, u, v, width, height, tw, th);
             } else if (pc == 11) {
-               DRAW_TEXTURE_METHOD.invoke(ctx, DRAW_TEXTURE_FIRST_ARG, id, x, y, u, v, width, height, texW, texH, -1);
+               DRAW_TEXTURE_METHOD.invoke(ctx, DRAW_TEXTURE_FIRST_ARG, id, x, y, u, v, width, height, tw, th, -1);
             } else if (pc == 12) {
-               DRAW_TEXTURE_METHOD.invoke(ctx, DRAW_TEXTURE_FIRST_ARG, id, x, y, u, v, width, height, width, height, texW, texH);
+               DRAW_TEXTURE_METHOD.invoke(ctx, DRAW_TEXTURE_FIRST_ARG, id, x, y, u, v, width, height, tw, th, tw, th);
             } else if (pc == 13) {
-               DRAW_TEXTURE_METHOD.invoke(ctx, DRAW_TEXTURE_FIRST_ARG, id, x, y, u, v, width, height, width, height, texW, texH, -1);
+               DRAW_TEXTURE_METHOD.invoke(ctx, DRAW_TEXTURE_FIRST_ARG, id, x, y, u, v, width, height, tw, th, tw, th, -1);
             }
-         } catch (ReflectiveOperationException var11) {
+         } catch (ReflectiveOperationException ignored) {
          }
+         flushDraw(ctx);
       }
    }
 
@@ -581,6 +853,7 @@ public final class DrawHelper {
       MAT_POP = (Method)mat[3];
       MAT_TRANSLATE = (Method)mat[4];
       MAT_SCALE = (Method)mat[5];
+      FLUSH_DRAW = resolveFlushDraw();
    }
 }
 

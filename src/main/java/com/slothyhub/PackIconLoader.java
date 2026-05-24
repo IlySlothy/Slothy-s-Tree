@@ -1,6 +1,7 @@
 package com.slothyhub;
 
 import com.slothyhub.compat.DrawHelper;
+import com.slothyhub.compat.Identifiers;
 import net.minecraft.class_1011;
 import net.minecraft.class_1043;
 import net.minecraft.class_2960;
@@ -167,8 +168,8 @@ public final class PackIconLoader {
                 String safe = packId.replaceAll("[^a-zA-Z0-9_\\-]", "_");
                 class_1043 tex = DrawHelper.createNativeTexture("slothyhub_packicon_" + safe, img);
                 if (tex == null) { cb.onFailed(packId); return; }
-                class_2960 id = class_2960.method_60655("slothyhub", "packicon/" + safe);
-                mc.method_1531().method_4616(id, tex);
+                class_2960 id = Identifiers.of("slothyhub", "packicon/" + safe);
+                DrawHelper.registerDynamicTexture(id, tex, img);
                 cb.onLoaded(packId, id, img.method_4307(), img.method_4323());
             } catch (Exception e) {
                 cb.onFailed(packId);

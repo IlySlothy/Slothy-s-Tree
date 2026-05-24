@@ -1,8 +1,9 @@
 package com.slothyhub.cit;
 
+import com.slothyhub.compat.McVersion;
+import org.objectweb.asm.tree.ClassNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.objectweb.asm.tree.ClassNode;
 import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 
@@ -10,8 +11,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Enables modern item-render-state CIT mixins on MC 1.21.4+ and legacy ItemRenderer
- * mixins on MC 1.21.2–1.21.3 so one jar can target 1.21.2–1.21.8.
+ * Gates CIT mixins by MC version. Atlas injection is always safe; draw hooks are version-specific.
  */
 public final class CitMixinPlugin implements IMixinConfigPlugin {
 
@@ -22,66 +22,30 @@ public final class CitMixinPlugin implements IMixinConfigPlugin {
 
     public static boolean isModernPipeline() {
         if (modernPipeline == null) {
-            modernPipeline = detectModernPipeline();
+            modernPipeline = McVersion.atLeast("1.21.4");
         }
         return modernPipeline;
     }
 
     public static boolean isLegacyPipeline() {
         if (legacyPipeline == null) {
-            legacyPipeline = !isModernPipeline() && detectLegacyPipeline();
+            legacyPipeline = !isModernPipeline();
         }
         return legacyPipeline;
     }
 
-    private static boolean detectModernPipeline() {
-        try {
-            Class<?> manager = Class.forName("net.minecraft.class_10442");
-            manager.getMethod(
-                "method_65598",
-                Class.forName("net.minecraft.class_10444"),
-                Class.forName("net.minecraft.class_1799"),
-                Class.forName("net.minecraft.class_811"),
-                Class.forName("net.minecraft.class_1937"),
-                Class.forName("net.minecraft.class_1309"),
-                int.class
-            );
-            return true;
-        } catch (Throwable ignored) {
-            return false;
-        }
-    }
-
-    private static boolean detectLegacyPipeline() {
-        try {
-            Class<?> itemRenderer = Class.forName("net.minecraft.class_918");
-            itemRenderer.getDeclaredMethod(
-                "method_23182",
-                Class.forName("net.minecraft.class_1087"),
-                Class.forName("net.minecraft.class_1799"),
-                int.class,
-                int.class,
-                Class.forName("net.minecraft.class_4587"),
-                Class.forName("net.minecraft.class_4588")
-            );
-            return true;
-        } catch (Throwable ignored) {
-            return false;
+    static void logPipelineMode() {
+        if (McVersion.below("1.21.4")) {
+            LOGGER.info("CIT pipeline: legacy model wrap + atlas PNGs (MC {})", McVersion.current());
+        } else if (McVersion.atLeast("1.21.8")) {
+            LOGGER.info("CIT pipeline: render-state + layer sprite (MC {})", McVersion.current());
+        } else {
+            LOGGER.info("CIT pipeline: render-state + atlas PNGs (MC {}, baked-model CIT only)", McVersion.current());
         }
     }
 
     @Override
-    public void onLoad(String mixinPackage) {
-        String mode;
-        if (isModernPipeline()) {
-            mode = "modern (1.21.4+)";
-        } else if (isLegacyPipeline()) {
-            mode = "legacy (1.21.2–1.21.3)";
-        } else {
-            mode = "unsupported";
-        }
-        LOGGER.info("CIT render pipeline: {}", mode);
-    }
+    public void onLoad(String mixinPackage) {}
 
     @Override
     public String getRefMapperConfig() {
@@ -90,12 +54,39 @@ public final class CitMixinPlugin implements IMixinConfigPlugin {
 
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
+        if (mixinClassName.endsWith("MixinCitAtlasLoader")
+            || mixinClassName.endsWith("MixinCitAtlasPreparation")
+            || mixinClassName.endsWith("MixinCitResourceFinder")) {
+            return true;
+        }
+
         if (mixinClassName.endsWith("MixinCitLegacyItemRenderer")) {
-            return isLegacyPipeline();
+            return McVersion.below("1.21.4");
         }
-        if (mixinClassName.contains("MixinCitItem")) {
-            return isModernPipeline();
+
+        if (mixinClassName.endsWith("MixinCitItemRenderState")
+            || mixinClassName.endsWith("MixinCitItemRenderStateClear")
+            || mixinClassName.endsWith("MixinCitLayerData")
+            || mixinClassName.endsWith("MixinCitItemLayerPrepareDraw")) {
+            return McVersion.atLeast("1.21.4");
         }
+
+        if (mixinClassName.endsWith("MixinCitItemDraw118")) {
+            return McVersion.atLeast("1.21.8");
+        }
+
+        if (mixinClassName.endsWith("MixinCitItemGetQuads114")) {
+            return McVersion.atLeast("1.21.4") && McVersion.below("1.21.8");
+        }
+
+        // Broken or experimental — keep disabled
+        if (mixinClassName.contains("MixinCitItemRenderStateApply")
+            || mixinClassName.contains("MixinCitItemModelBake")
+            || mixinClassName.contains("MixinCitItemRendererModern")
+            || mixinClassName.contains("MixinCitItemRenderQuads")) {
+            return false;
+        }
+
         return true;
     }
 

@@ -1,6 +1,8 @@
 package com.slothyhub;
 
 import com.github.junrar.Junrar;
+import com.slothyhub.builder.ResourceScanHelper;
+import com.slothyhub.cit.CitEngine;
 import com.slothyhub.compat.VersionCompat;
 import java.io.IOException;
 import java.io.InputStream;
@@ -14,6 +16,7 @@ import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -32,7 +35,89 @@ public class PackDownloader {
     private static final String MARKER_FILENAME = ".slothyhub-active";
 
     public static Set<String> getActivePackIds() {
-        return new LinkedHashSet<>(readMarker(class_310.method_1551()).keySet());
+        class_310 mc = class_310.method_1551();
+        Map<String, String> marker = readMarker(mc);
+        if (marker.isEmpty()) return Set.of();
+        class_3283 manager = mc.method_1520();
+        VersionCompat.refresh(manager);
+        Collection<String> enabled = VersionCompat.enabledNames(manager);
+        Set<String> active = new LinkedHashSet<>();
+        for (Map.Entry<String, String> e : marker.entrySet()) {
+            if (isPackEnabled(enabled, e.getValue())) active.add(e.getKey());
+        }
+        return active;
+    }
+
+    /** Re-enable marker packs that Minecraft dropped from the active list (common on 1.21.4). */
+    public static void syncAppliedPacks() {
+        class_310 mc = class_310.method_1551();
+        Map<String, String> marker = readMarker(mc);
+        if (marker.isEmpty()) return;
+        Path resourcePacksDir = mc.field_1697.toPath().resolve("resourcepacks").normalize();
+        class_3283 manager = mc.method_1520();
+        VersionCompat.refresh(manager);
+        Collection<String> enabled = VersionCompat.enabledNames(manager);
+        boolean markerChanged = false;
+        for (Map.Entry<String, String> entry : new ArrayList<>(marker.entrySet())) {
+            String packId = entry.getKey();
+            String folder = entry.getValue();
+            Path resolved = resolvePackPath(resourcePacksDir, folder);
+            if (resolved == null) {
+                String alt = alternatePackFilename(resourcePacksDir, folder);
+                if (alt != null) {
+                    folder = alt;
+                    marker.put(packId, alt);
+                    markerChanged = true;
+                    resolved = resolvePackPath(resourcePacksDir, folder);
+                }
+            }
+            if (resolved == null) continue;
+            if (!isPackEnabled(enabled, folder)) {
+                try {
+                    applyResourcePack(mc, folder);
+                    SlothyHubMod.LOGGER.info("SlothyHub: re-applied resource pack '{}'", folder);
+                    enabled = VersionCompat.enabledNames(mc.method_1520());
+                } catch (Exception e) {
+                    SlothyHubMod.LOGGER.warn("SlothyHub: could not re-apply '{}': {}", folder, e.getMessage());
+                }
+            }
+        }
+        if (markerChanged) writeMarker(mc, marker);
+        scheduleCitReload(mc);
+    }
+
+    private static void scheduleCitReload(class_310 mc) {
+        if (mc == null) return;
+        mc.execute(() -> CitEngine.reloadFromManager(ResourceScanHelper.resourceManager()));
+    }
+
+    private static Path resolvePackPath(Path resourcePacksDir, String folderName) {
+        if (folderName == null || folderName.isBlank()) return null;
+        Path p = resourcePacksDir.resolve(folderName).normalize();
+        return p.startsWith(resourcePacksDir) && Files.exists(p) ? p : null;
+    }
+
+    /** e.g. marker folder "Blossom" but only "Blossom.zip" exists on disk. */
+    private static String alternatePackFilename(Path resourcePacksDir, String folder) {
+        if (folder == null || folder.isBlank()) return null;
+        String zip = folder.endsWith(".zip") ? folder : folder + ".zip";
+        if (Files.isRegularFile(resourcePacksDir.resolve(zip))) return zip;
+        if (folder.endsWith(".zip")) {
+            String bare = folder.substring(0, folder.length() - 4);
+            if (Files.isDirectory(resourcePacksDir.resolve(bare))) return bare;
+        }
+        return null;
+    }
+
+    private static boolean isPackEnabled(Collection<String> enabled, String folderName) {
+        if (folderName == null || folderName.isBlank()) return false;
+        for (String id : enabled) {
+            if (id.equals(folderName) || id.equals("file/" + folderName) || id.equals("file:" + folderName)
+                || id.endsWith("/" + folderName) || id.endsWith(":" + folderName)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static String getActivePackFolder(String packId) {
@@ -174,9 +259,9 @@ public class PackDownloader {
         String fn = pack.getPackFilename();
         if (fn != null && !fn.isBlank()) {
             Path direct = rp.resolve(fn);
-            if (Files.isRegularFile(direct)) return direct;
+            if (Files.isRegularFile(direct) || Files.isDirectory(direct)) return direct;
             Path inLocal = com.slothyhub.local.LocalPackManager.getLocalPackDir().resolve(fn);
-            if (Files.isRegularFile(inLocal)) return inLocal;
+            if (Files.isRegularFile(inLocal) || Files.isDirectory(inLocal)) return inLocal;
         }
         String packUrl = pack.getPackUrl();
         if (packUrl != null && packUrl.startsWith("file:")) {
@@ -197,6 +282,35 @@ public class PackDownloader {
                 return;
             }
             Files.createDirectories(resourcePacksDir);
+            Path normalizedRp = resourcePacksDir.normalize();
+            Path normalizedSource = sourcePath.normalize();
+            String sourceName = normalizedSource.getFileName().toString();
+            boolean isZip = sourceName.toLowerCase(Locale.ROOT).endsWith(".zip");
+            boolean inResourcePacksRoot = normalizedSource.getParent() != null
+                && normalizedSource.getParent().equals(normalizedRp);
+
+            // Pack already in resourcepacks/ — repair and enable in place (no re-extract).
+            if (inResourcePacksRoot) {
+                mc.execute(cb::onApplying);
+                if (Files.isDirectory(normalizedSource)) {
+                    PackMetaUtil.repairFolder(normalizedSource);
+                } else if (isZip) {
+                    PackMetaUtil.repairZip(normalizedSource);
+                }
+                final String enableName = sourceName;
+                mc.execute(() -> {
+                    try {
+                        applyResourcePack(mc, enableName);
+                        addToMarker(mc, pack.getId(), enableName);
+                        cb.onDone();
+                    } catch (Exception e) {
+                        SlothyHubMod.LOGGER.error("Failed to apply local pack '{}'", enableName, e);
+                        cb.onError("Couldn't enable pack — check Resource Packs menu.");
+                    }
+                });
+                return;
+            }
+
             String safeBase = pack.getName().replaceAll("[^a-zA-Z0-9_\\-. ]", "_").trim();
             if (safeBase.isEmpty()) safeBase = "local-pack";
 
@@ -326,29 +440,43 @@ public class PackDownloader {
 
     private static void applyResourcePack(class_310 mc, String fileName) {
         class_3283 manager = mc.method_1520();
-        String id = resolveProfileId(manager, fileName, 4);
+        VersionCompat.refresh(manager);
+        String id = resolveProfileId(manager, fileName, 12);
         if (id == null) {
-            SlothyHubMod.LOGGER.error("Pack '{}' not found in manager", fileName);
+            SlothyHubMod.LOGGER.error("Pack '{}' not found in manager (known: {})", fileName,
+                VersionCompat.profileIds(manager));
             throw new IllegalStateException("Manager could not find pack folder: file/" + fileName);
         }
         LinkedHashSet<String> enabled = new LinkedHashSet<>(VersionCompat.enabledNames(manager));
         enabled.remove(id);
+        enabled.remove("file/" + fileName);
+        enabled.remove("file:" + fileName);
+        enabled.remove(fileName);
         enabled.add(id);
-        manager.method_14447(enabled);
+        VersionCompat.setEnabled(manager, enabled);
         List<String> optList = mc.field_1690.field_1887;
         optList.clear();
         optList.addAll(enabled);
         mc.field_1690.method_1640();
-        mc.method_1521().exceptionally(e -> { SlothyHubMod.LOGGER.error("reloadResources failed for {}", id, e); return null; });
-        SlothyHubMod.LOGGER.info("Enabled resource pack '{}'", id);
+        VersionCompat.refresh(manager);
+        if (!isPackEnabled(VersionCompat.enabledNames(manager), fileName)) {
+            throw new IllegalStateException("Pack not enabled after apply: " + id);
+        }
+        mc.method_1521()
+            .thenRun(() -> {
+                class_310 client = class_310.method_1551();
+                if (client != null) scheduleCitReload(client);
+            })
+            .exceptionally(e -> { SlothyHubMod.LOGGER.error("reloadResources failed for {}", id, e); return null; });
+        SlothyHubMod.LOGGER.info("Enabled resource pack '{}' as {}", fileName, id);
     }
 
     private static String resolveProfileId(class_3283 manager, String folderName, int retries) {
         String[] candidates = {"file/" + folderName, "file:" + folderName, folderName};
         for (int attempt = 0; attempt <= retries; attempt++) {
-            manager.method_14445();
+            VersionCompat.refresh(manager);
             for (String c : candidates) {
-                if (manager.method_14449(c) != null) return c;
+                if (VersionCompat.hasProfile(manager, c)) return c;
             }
             for (String pid : VersionCompat.profileIds(manager)) {
                 if (pid.endsWith("/" + folderName) || pid.endsWith(":" + folderName)) return pid;
@@ -368,10 +496,10 @@ public class PackDownloader {
                 String id = "file/" + folder;
                 class_3283 manager = mc.method_1520();
                 try {
-                    manager.method_14445();
+                    VersionCompat.refresh(manager);
                     LinkedHashSet<String> enabled = new LinkedHashSet<>(VersionCompat.enabledNames(manager));
                     boolean changed = enabled.remove(id) | enabled.remove("file:" + folder) | enabled.remove(folder);
-                    if (changed) manager.method_14447(enabled);
+                    if (changed) VersionCompat.setEnabled(manager, enabled);
                     List<String> optList = mc.field_1690.field_1887;
                     if (optList.removeIf(s -> s.equals(id) || s.equals("file:" + folder) || s.equals(folder))) mc.field_1690.method_1640();
                     if (changed) mc.method_1521().exceptionally(e -> { SlothyHubMod.LOGGER.error("reloadResources failed during remove", e); return null; });
@@ -450,12 +578,12 @@ public class PackDownloader {
         mc.execute(() -> {
             class_3283 manager = mc.method_1520();
             try {
-                manager.method_14445();
+                VersionCompat.refresh(manager);
                 LinkedHashSet<String> enabled = new LinkedHashSet<>(VersionCompat.enabledNames(manager));
                 for (String folder : marker.values()) {
                     enabled.remove("file/" + folder); enabled.remove("file:" + folder); enabled.remove(folder);
                 }
-                manager.method_14447(enabled);
+                VersionCompat.setEnabled(manager, enabled);
                 List<String> optList = mc.field_1690.field_1887;
                 optList.removeIf(s -> { for (String f : marker.values()) { if (s.equals("file/" + f) || s.equals("file:" + f) || s.equals(f)) return true; } return false; });
                 mc.field_1690.method_1640();

@@ -29,15 +29,6 @@ public class PackLibraryScreen extends class_437 {
     private static final int CARD_H = 72;
     private static final int PAD = 16;
 
-    private static final int BG = Ui.COL_BG;
-    private static final int PANEL = Ui.COL_PANEL;
-    private static final int SURFACE = Ui.COL_SURFACE;
-    private static final int ACCENT = Ui.COL_ACCENT;
-    private static final int DANGER = Ui.COL_DANGER;
-    private static final int TEXT = Ui.COL_TEXT;
-    private static final int MUTED = Ui.COL_MUTED;
-    private static final int BORDER = Ui.COL_BORDER;
-
     private static int col(int rgb, int a) { return Ui.withAlpha(rgb & 0xFFFFFF, a); }
 
     private final class_437 parent;
@@ -87,18 +78,18 @@ public class PackLibraryScreen extends class_437 {
         scroll += (scrollTarget - scroll) * Math.min(1f, delta * 0.28f);
         float phase = (float)(System.currentTimeMillis() % 4000L) / 4000f;
 
-        ctx.method_25294(0, 0, field_22789, field_22790, BG);
+        ctx.method_25294(0, 0, field_22789, field_22790, Ui.COL_BG);
         if (SlothyConfig.isBackgroundEffects())
             Ui.renderLeafParallax(ctx, field_22789, field_22790, delta);
 
-        ctx.method_25294(0, 0, field_22789, HEADER, PANEL);
-        ctx.method_25294(0, 0, field_22789, 2, ACCENT);
-        ctx.method_25294(0, HEADER - 1, field_22789, HEADER, BORDER);
-        Ui.drawSlothBadge(ctx, field_22793, PAD, (HEADER - 14) / 2, phase);
-        DrawHelper.drawText(ctx, field_22793, "MY PACK LIBRARY", PAD + 22, (HEADER - 9) / 2, ACCENT, false);
+        ctx.method_25294(0, 0, field_22789, HEADER, Ui.COL_PANEL);
+        ctx.method_25294(0, 0, field_22789, 2, Ui.COL_ACCENT);
+        ctx.method_25294(0, HEADER - 1, field_22789, HEADER, Ui.COL_BORDER);
+        Ui.drawSlothLogo(ctx, PAD, (HEADER - 16) / 2, phase);
+        DrawHelper.drawText(ctx, field_22793, "MY PACK LIBRARY", PAD + 22, (HEADER - 9) / 2, Ui.COL_ACCENT, false);
         DrawHelper.drawText(ctx, field_22793, packs.size() + " pack(s)",
             field_22789 - PAD - field_22793.method_1727(packs.size() + " pack(s)"),
-            (HEADER - 9) / 2, MUTED, false);
+            (HEADER - 9) / 2, Ui.COL_MUTED, false);
 
         int top = HEADER, bot = field_22790 - FOOTER;
         ctx.method_44379(0, top, field_22789, bot);
@@ -107,12 +98,12 @@ public class PackLibraryScreen extends class_437 {
             String msg = "No custom packs yet";
             String hint = "Build one in TEXTURES → Texture Builder";
             int cy = (top + bot) / 2;
-            Ui.drawPawPrint(ctx, field_22789 / 2, cy - 24, col(ACCENT & 0xFFFFFF, 80), 1.4f);
+            Ui.drawPawPrint(ctx, field_22789 / 2, cy - 24, col(Ui.COL_ACCENT & 0xFFFFFF, 80), 1.4f);
             DrawHelper.drawText(ctx, field_22793, msg,
-                field_22789 / 2 - field_22793.method_1727(msg) / 2, cy, MUTED, false);
+                field_22789 / 2 - field_22793.method_1727(msg) / 2, cy, Ui.COL_MUTED, false);
             DrawHelper.drawText(ctx, field_22793, hint,
                 field_22789 / 2 - field_22793.method_1727(hint) / 2, cy + 14,
-                col(MUTED & 0xFFFFFF, 160), false);
+                col(Ui.COL_MUTED & 0xFFFFFF, 160), false);
         } else {
             int cardW = Math.min(field_22789 - PAD * 2, 720);
             int cardX = (field_22789 - cardW) / 2;
@@ -127,8 +118,8 @@ public class PackLibraryScreen extends class_437 {
         }
         ctx.method_44380();
 
-        ctx.method_25294(0, field_22790 - FOOTER, field_22789, field_22790, PANEL);
-        ctx.method_25294(0, field_22790 - FOOTER, field_22789, field_22790 - FOOTER + 1, BORDER);
+        ctx.method_25294(0, field_22790 - FOOTER, field_22789, field_22790, Ui.COL_PANEL);
+        ctx.method_25294(0, field_22790 - FOOTER, field_22789, field_22790 - FOOTER + 1, Ui.COL_BORDER);
 
         for (class_364 w : method_25396()) {
             if (w instanceof class_4068 d) d.method_25394(ctx, mx, my, delta);
@@ -137,34 +128,34 @@ public class PackLibraryScreen extends class_437 {
 
     private void drawCard(class_332 ctx, Pack pack, int x, int y, int w, int mx, int my) {
         boolean hov = mx >= x && mx <= x + w && my >= y && my <= y + CARD_H;
-        ctx.method_25294(x, y, x + w, y + CARD_H, hov ? col(SURFACE & 0xFFFFFF, 200) : col(PANEL & 0xFFFFFF, 160));
-        ctx.method_25294(x, y, x + 3, y + CARD_H, ACCENT);
-        Ui.drawPawPrint(ctx, x + 28, y + CARD_H / 2, col(ACCENT & 0xFFFFFF, hov ? 180 : 100), 0.9f);
+        ctx.method_25294(x, y, x + w, y + CARD_H, hov ? col(Ui.COL_SURFACE & 0xFFFFFF, 200) : col(Ui.COL_PANEL & 0xFFFFFF, 160));
+        ctx.method_25294(x, y, x + 3, y + CARD_H, Ui.COL_ACCENT);
+        Ui.drawPawPrint(ctx, x + 28, y + CARD_H / 2, col(Ui.COL_ACCENT & 0xFFFFFF, hov ? 180 : 100), 0.9f);
 
-        DrawHelper.drawText(ctx, field_22793, pack.getName(), x + 48, y + 16, TEXT, false);
+        DrawHelper.drawText(ctx, field_22793, pack.getName(), x + 48, y + 16, Ui.COL_TEXT, false);
         DrawHelper.drawText(ctx, field_22793, "Built with Texture Builder  ·  " + pack.getPackFilename(),
-            x + 48, y + 32, MUTED, false);
+            x + 48, y + 32, Ui.COL_MUTED, false);
 
         String st = status.get(pack.getId());
         if (st != null) {
             DrawHelper.drawText(ctx, field_22793, st, x + 48, y + 48,
-                st.toLowerCase(Locale.ROOT).contains("fail") ? DANGER : ACCENT, false);
+                st.toLowerCase(Locale.ROOT).contains("fail") ? Ui.COL_DANGER : Ui.COL_ACCENT, false);
         }
 
         int btnW = 72, btnH = 22;
         int applyX = x + w - btnW - PAD - btnW - 8;
         int delX = x + w - btnW - PAD;
         int btnY = y + (CARD_H - btnH) / 2;
-        drawMiniBtn(ctx, applyX, btnY, btnW, btnH, "APPLY", ACCENT, mx, my);
-        drawMiniBtn(ctx, delX, btnY, btnW, btnH, "DELETE", DANGER, mx, my);
+        drawMiniBtn(ctx, applyX, btnY, btnW, btnH, "APPLY", Ui.COL_ACCENT, mx, my);
+        drawMiniBtn(ctx, delX, btnY, btnW, btnH, "DELETE", Ui.COL_DANGER, mx, my);
     }
 
     private void drawMiniBtn(class_332 ctx, int x, int y, int w, int h, String label, int color, int mx, int my) {
         boolean hov = mx >= x && mx <= x + w && my >= y && my <= y + h;
-        ctx.method_25294(x, y, x + w, y + h, hov ? col(color & 0xFFFFFF, 220) : col(SURFACE & 0xFFFFFF, 180));
+        ctx.method_25294(x, y, x + w, y + h, hov ? col(color & 0xFFFFFF, 220) : col(Ui.COL_SURFACE & 0xFFFFFF, 180));
         DrawHelper.drawText(ctx, field_22793, label,
             x + (w - field_22793.method_1727(label)) / 2, y + (h - 9) / 2,
-            hov ? BG : color, false);
+            hov ? Ui.COL_BG : color, false);
     }
 
     private void drawScrollbar(class_332 ctx, int top, int bot, int totalH) {
@@ -173,8 +164,8 @@ public class PackLibraryScreen extends class_437 {
         int trkX = field_22789 - 6, trkY = top + 8, trkH = listH - 16;
         int thumbH = Math.max(24, trkH * listH / totalH);
         int thumbY = trkY + (int)((double)(trkH - thumbH) * scroll / Math.max(1, totalH - listH));
-        ctx.method_25294(trkX, trkY, trkX + 3, trkY + trkH, col(BORDER & 0xFFFFFF, 120));
-        ctx.method_25294(trkX, thumbY, trkX + 3, thumbY + thumbH, col(ACCENT & 0xFFFFFF, 200));
+        ctx.method_25294(trkX, trkY, trkX + 3, trkY + trkH, col(Ui.COL_BORDER & 0xFFFFFF, 120));
+        ctx.method_25294(trkX, thumbY, trkX + 3, thumbY + thumbH, col(Ui.COL_ACCENT & 0xFFFFFF, 200));
     }
 
     @Override

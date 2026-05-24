@@ -5,8 +5,9 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
+import com.slothyhub.compat.Identifiers;
+import com.slothyhub.compat.McVersion;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -19,18 +20,56 @@ import java.util.zip.ZipFile;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
-/** Safe pack.mcmeta read/write — avoids invalid JSON that crashes resource-pack loading. */
+/** Safe pack.mcmeta read/write — avoids invalid JSON and wrong pack_format for the running game. */
 public final class PackMetaUtil {
 
     private static final Gson GSON = new Gson();
+    /** Widest texture-only range this mod targets (1.20 → 1.21.8). */
+    private static final int SUPPORTED_FORMAT_MIN = 15;
 
     private PackMetaUtil() {}
 
+    public static int packFormatForCurrentGame() {
+        return packFormatForVersion(McVersion.current());
+    }
+
+    public static int packFormatForVersion(String version) {
+        if (compareVersions(version, "1.21.8") >= 0) return 64;
+        if (compareVersions(version, "1.21.7") >= 0) return 64;
+        if (compareVersions(version, "1.21.6") >= 0) return 63;
+        if (compareVersions(version, "1.21.5") >= 0) return 55;
+        if (compareVersions(version, "1.21.4") >= 0) return 46;
+        if (compareVersions(version, "1.21.3") >= 0) return 42;
+        if (compareVersions(version, "1.21.2") >= 0) return 42;
+        if (compareVersions(version, "1.21.1") >= 0) return 34;
+        if (compareVersions(version, "1.21") >= 0) return 34;
+        if (compareVersions(version, "1.20.6") >= 0) return 32;
+        if (compareVersions(version, "1.20.5") >= 0) return 32;
+        if (compareVersions(version, "1.20.4") >= 0) return 32;
+        if (compareVersions(version, "1.20.3") >= 0) return 22;
+        if (compareVersions(version, "1.20.2") >= 0) return 18;
+        return 15;
+    }
+
     public static byte[] buildMcmetaBytes(String description, int packFormat) {
+        return buildCompatibleMcmetaBytes(description, packFormat);
+    }
+
+    public static byte[] buildCompatibleMcmetaBytes(String description) {
+        return buildCompatibleMcmetaBytes(description, packFormatForCurrentGame());
+    }
+
+    public static byte[] buildCompatibleMcmetaBytes(String description, int packFormat) {
         JsonObject root = new JsonObject();
         JsonObject pack = new JsonObject();
         pack.addProperty("pack_format", packFormat);
         pack.add("description", new JsonPrimitive(sanitizeDescription(description)));
+        int minFormat = Math.min(SUPPORTED_FORMAT_MIN, packFormat);
+        JsonObject supported = new JsonObject();
+        supported.addProperty("min_inclusive", minFormat);
+        // Never claim support above the running game — 1.21.4 rejects max_inclusive: 64.
+        supported.addProperty("max_inclusive", packFormat);
+        pack.add("supported_formats", supported);
         root.add("pack", pack);
         return GSON.toJson(root).getBytes(StandardCharsets.UTF_8);
     }
@@ -71,33 +110,32 @@ public final class PackMetaUtil {
     public static void repairFolder(Path dir) throws IOException {
         Path mcmeta = dir.resolve("pack.mcmeta");
         String desc = dir.getFileName().toString().replace('_', ' ');
-        int format = 34;
+        int targetFormat = packFormatForCurrentGame();
         if (Files.isRegularFile(mcmeta)) {
             String raw = Files.readString(mcmeta, StandardCharsets.UTF_8);
-            if (isValidMcmeta(raw)) return;
-            desc = extractDescriptionLoose(raw, desc);
-            format = extractPackFormatLoose(raw, format);
+            if (isValidMcmeta(raw) && !needsFormatUpgrade(raw, targetFormat)) return;
+            desc = extractDescription(raw, desc);
         }
-        Files.write(mcmeta, buildMcmetaBytes(desc, format));
+        Files.write(mcmeta, buildCompatibleMcmetaBytes(desc, targetFormat));
+        SlothyHubMod.LOGGER.info("SlothyHub: set pack.mcmeta format {} for {}", targetFormat, dir.getFileName());
     }
 
     /** Returns true if the zip was rewritten. */
     public static boolean repairZip(Path zipPath) {
+        Path tmp = zipPath.resolveSibling(zipPath.getFileName() + ".slothyhub-repair.tmp");
         try {
             String desc = zipPath.getFileName().toString().replaceAll("(?i)\\.zip$", "").replace('_', ' ');
-            int format = 34;
-            byte[] newMcmeta;
+            int targetFormat = packFormatForCurrentGame();
             try (ZipFile zf = new ZipFile(zipPath.toFile())) {
                 ZipEntry e = zf.getEntry("pack.mcmeta");
                 if (e != null) {
                     String raw = new String(readAll(zf.getInputStream(e)), StandardCharsets.UTF_8);
-                    if (isValidMcmeta(raw)) return false;
-                    desc = extractDescriptionLoose(raw, desc);
-                    format = extractPackFormatLoose(raw, format);
+                    if (isValidMcmeta(raw) && !needsFormatUpgrade(raw, targetFormat)) return false;
+                    desc = extractDescription(raw, desc);
                 }
             }
-            newMcmeta = buildMcmetaBytes(desc, format);
-            Path tmp = zipPath.resolveSibling(zipPath.getFileName() + ".slothyhub-repair.tmp");
+            byte[] newMcmeta = buildCompatibleMcmetaBytes(desc, targetFormat);
+            Files.deleteIfExists(tmp);
             try (ZipFile zf = new ZipFile(zipPath.toFile());
                  ZipOutputStream zos = new ZipOutputStream(Files.newOutputStream(tmp))) {
                 var entries = zf.entries();
@@ -120,12 +158,128 @@ public final class PackMetaUtil {
                 if (!wroteMcmeta) putEntry(zos, "pack.mcmeta", newMcmeta);
             }
             Files.move(tmp, zipPath, StandardCopyOption.REPLACE_EXISTING);
-            SlothyHubMod.LOGGER.info("Repaired invalid pack.mcmeta in {}", zipPath.getFileName());
+            SlothyHubMod.LOGGER.info("SlothyHub: set pack.mcmeta format {} in {}", targetFormat, zipPath.getFileName());
             return true;
         } catch (Exception e) {
             SlothyHubMod.LOGGER.warn("Could not repair {}: {}", zipPath.getFileName(), e.getMessage());
             return false;
+        } finally {
+            try { Files.deleteIfExists(tmp); } catch (IOException ignored) {}
         }
+    }
+
+    /**
+     * When a zip cannot be rewritten in place, extract readable entries to a sibling folder
+     * and remove the zip so Minecraft and SlothyHub can still use the textures.
+     */
+    public static boolean migrateCorruptZipToFolder(Path zipPath) {
+        if (!Files.isRegularFile(zipPath)) return false;
+        String fileName = zipPath.getFileName().toString();
+        if (!fileName.toLowerCase(Locale.ROOT).endsWith(".zip")) return false;
+        String folderName = fileName.substring(0, fileName.length() - 4);
+        Path folder = zipPath.resolveSibling(folderName);
+        try {
+            if (Files.isDirectory(folder)) {
+                repairFolder(folder);
+                Files.deleteIfExists(zipPath);
+                SlothyHubMod.LOGGER.info("Removed corrupt zip {} (using existing folder {})",
+                    zipPath.getFileName(), folder.getFileName());
+                return true;
+            }
+            int extracted = extractZipToFolder(zipPath, folder);
+            if (extracted <= 0) return false;
+            repairFolder(folder);
+            Files.deleteIfExists(zipPath);
+            SlothyHubMod.LOGGER.info("Extracted {} readable file(s) from {} → {}, removed zip",
+                extracted, zipPath.getFileName(), folder.getFileName());
+            return true;
+        } catch (Exception e) {
+            SlothyHubMod.LOGGER.warn("Could not migrate {} to folder: {}", zipPath.getFileName(), e.getMessage());
+            return false;
+        }
+    }
+
+    /** Best-effort extraction; skips individual corrupt entries. */
+    static int extractZipToFolder(Path zipPath, Path destDir) throws IOException {
+        Files.createDirectories(destDir);
+        int extracted = 0;
+        try (ZipInputStream zis = new ZipInputStream(Files.newInputStream(zipPath))) {
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                if (entry.isDirectory()) {
+                    zis.closeEntry();
+                    continue;
+                }
+                String name = entry.getName().replace('\\', '/');
+                if (name.contains("..")) {
+                    zis.closeEntry();
+                    continue;
+                }
+                Path out = destDir.resolve(name);
+                Files.createDirectories(out.getParent());
+                try {
+                    Files.copy(zis, out, StandardCopyOption.REPLACE_EXISTING);
+                    extracted++;
+                } catch (IOException e) {
+                    SlothyHubMod.LOGGER.debug("Skipped corrupt entry {} in {}: {}",
+                        name, zipPath.getFileName(), e.getMessage());
+                }
+                zis.closeEntry();
+            }
+        }
+        return extracted;
+    }
+
+    public static boolean needsRepair(String raw) {
+        if (!isValidMcmeta(raw)) return true;
+        return needsFormatUpgrade(raw, packFormatForCurrentGame());
+    }
+
+    private static boolean needsFormatUpgrade(String raw, int targetFormat) {
+        try {
+            JsonObject pack = JsonParser.parseString(raw).getAsJsonObject().getAsJsonObject("pack");
+            int packFormat = pack.has("pack_format") ? pack.get("pack_format").getAsInt() : -1;
+            if (packFormat != targetFormat) return true;
+            if (!pack.has("supported_formats")) return true;
+            JsonElement sf = pack.get("supported_formats");
+            if (!supportedFormatsInclude(sf, targetFormat)) return true;
+            if (sf.isJsonObject()) {
+                JsonObject range = sf.getAsJsonObject();
+                int max = range.has("max_inclusive") ? range.get("max_inclusive").getAsInt() : packFormat;
+                int min = range.has("min_inclusive") ? range.get("min_inclusive").getAsInt() : packFormat;
+                if (max > targetFormat || min > targetFormat) return true;
+                if (packFormat < min || packFormat > max) return true;
+            }
+            return false;
+        } catch (Exception ignored) {}
+        return true;
+    }
+
+    private static boolean supportedFormatsInclude(JsonElement el, int format) {
+        if (el == null || el.isJsonNull()) return false;
+        if (el.isJsonObject()) {
+            JsonObject o = el.getAsJsonObject();
+            int min = o.has("min_inclusive") ? o.get("min_inclusive").getAsInt() : format;
+            int max = o.has("max_inclusive") ? o.get("max_inclusive").getAsInt() : format;
+            return format >= min && format <= max;
+        }
+        if (el.isJsonArray()) {
+            for (JsonElement e : el.getAsJsonArray()) {
+                if (e.getAsInt() == format) return true;
+            }
+        }
+        return false;
+    }
+
+    private static String extractDescription(String raw, String fallback) {
+        try {
+            JsonObject pack = JsonParser.parseString(raw).getAsJsonObject().getAsJsonObject("pack");
+            JsonElement desc = pack.get("description");
+            if (desc != null && desc.isJsonPrimitive()) {
+                return sanitizeDescription(desc.getAsString());
+            }
+        } catch (Exception ignored) {}
+        return extractDescriptionLoose(raw, fallback);
     }
 
     private static String extractDescriptionLoose(String raw, String fallback) {
@@ -146,17 +300,29 @@ public final class PackMetaUtil {
         return out.isEmpty() ? sanitizeDescription(fallback) : sanitizeDescription(out);
     }
 
-    private static int extractPackFormatLoose(String raw, int fallback) {
-        int idx = raw.indexOf("\"pack_format\"");
-        if (idx < 0) return fallback;
-        int colon = raw.indexOf(':', idx);
-        if (colon < 0) return fallback;
-        int i = colon + 1;
-        while (i < raw.length() && !Character.isDigit(raw.charAt(i))) i++;
-        int j = i;
-        while (j < raw.length() && Character.isDigit(raw.charAt(j))) j++;
-        if (j <= i) return fallback;
-        try { return Integer.parseInt(raw.substring(i, j)); } catch (NumberFormatException e) { return fallback; }
+    private static String normalizeMcVersion(String version) {
+        int dash = version.indexOf('-');
+        return dash > 0 ? version.substring(0, dash) : version;
+    }
+
+    private static int compareVersions(String left, String right) {
+        String[] a = left.split("\\.");
+        String[] b = right.split("\\.");
+        int len = Math.max(a.length, b.length);
+        for (int i = 0; i < len; i++) {
+            int va = i < a.length ? parsePart(a[i]) : 0;
+            int vb = i < b.length ? parsePart(b[i]) : 0;
+            if (va != vb) return Integer.compare(va, vb);
+        }
+        return 0;
+    }
+
+    private static int parsePart(String part) {
+        try {
+            return Integer.parseInt(part.replaceAll("[^0-9].*", ""));
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 
     private static byte[] readAll(InputStream in) throws IOException {

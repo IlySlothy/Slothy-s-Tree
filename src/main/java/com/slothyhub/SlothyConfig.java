@@ -3,12 +3,14 @@ package com.slothyhub;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
+import com.slothyhub.cit.CitRuleSet;
+import com.slothyhub.cit.CitVirtualTextures;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.UUID;
 import net.fabricmc.loader.api.FabricLoader;
-
 public class SlothyConfig {
 
     /** Free GitHub Pages catalog — change in settings when you move to a paid domain. */
@@ -35,6 +37,20 @@ public class SlothyConfig {
     private static String killEffect = "totem";
     private static boolean citEnabled = true;
     private static boolean showLocalPacks = true;
+
+    // GUI theme (SlothyHub client colors)
+    private static String themePreset = "forest";
+    private static int themeBg = 0xFF0B1410;
+    private static int themePanel = 0xFF131D18;
+    private static int themeSurface = 0xFF1D2F24;
+    private static int themeAccent = 0xFF52D47A;
+    private static int themeText = 0xFFECF5EE;
+    private static int themeMuted = 0xFF7A9E84;
+    private static int themeBorder = 0xFF253C2C;
+
+    // Kill effect assets from built/applied packs
+    private static String killTotemTexture = "minecraft:item/totem_of_undying";
+    private static String killTotemSound = "minecraft:item.totem.use";
 
     public static String getServerUrl() {
         return urlOverride != null && !urlOverride.isBlank() ? urlOverride : serverUrl;
@@ -88,6 +104,44 @@ public class SlothyConfig {
     public static boolean isCitEnabled() { return citEnabled; }
     public static boolean isShowLocalPacks() { return showLocalPacks; }
 
+    public static String getThemePreset() { return themePreset; }
+    public static int getThemeBg() { return themeBg; }
+    public static int getThemePanel() { return themePanel; }
+    public static int getThemeSurface() { return themeSurface; }
+    public static int getThemeAccent() { return themeAccent; }
+    public static int getThemeText() { return themeText; }
+    public static int getThemeMuted() { return themeMuted; }
+    public static int getThemeBorder() { return themeBorder; }
+
+    public static String getKillTotemTexture() { return killTotemTexture; }
+    public static String getKillTotemSound() { return killTotemSound; }
+
+    public static void setTheme(int bg, int panel, int surface, int accent, int text, int muted, int border, String preset) {
+        applyThemeColors(bg, panel, surface, accent, text, muted, border, preset);
+        save();
+    }
+
+    /** Update theme in memory without writing config (for live color dragging). */
+    public static void setThemeLive(int bg, int panel, int surface, int accent, int text, int muted, int border) {
+        applyThemeColors(bg, panel, surface, accent, text, muted, border, "custom");
+    }
+
+    private static void applyThemeColors(int bg, int panel, int surface, int accent, int text, int muted, int border, String preset) {
+        themeBg = bg; themePanel = panel; themeSurface = surface;
+        themeAccent = accent; themeText = text; themeMuted = muted; themeBorder = border;
+        themePreset = preset == null ? "custom" : preset;
+    }
+
+    public static void setKillTotemTexture(String id) {
+        killTotemTexture = id == null || id.isBlank() ? "minecraft:item/totem_of_undying" : id.trim();
+        save();
+    }
+
+    public static void setKillTotemSound(String id) {
+        killTotemSound = id == null || id.isBlank() ? "minecraft:item.totem.use" : id.trim();
+        save();
+    }
+
     public static void setBatchedReload(boolean v) { batchedReload = v; save(); }
     public static void setPrefetchThumbnails(boolean v) { prefetchThumbnails = v; save(); }
     public static void setAnimationsEnabled(boolean v) { animationsEnabled = v; save(); }
@@ -100,7 +154,14 @@ public class SlothyConfig {
     public static void setLazyLoadCards(boolean v) { lazyLoadCards = v; save(); }
     public static void setReducedMotion(boolean v) { reducedMotion = v; save(); }
     public static void setCacheExpiry(int v) { cacheExpiry = Math.max(5, Math.min(120, v)); save(); }
-    public static void setCitEnabled(boolean v) { citEnabled = v; save(); }
+    public static void setCitEnabled(boolean v) {
+        citEnabled = v;
+        save();
+        if (!v) {
+            CitRuleSet.setActive(new CitRuleSet(List.of()));
+            CitVirtualTextures.clear();
+        }
+    }
     public static void setShowLocalPacks(boolean v) { showLocalPacks = v; save(); }
 
     public static void setKillEffect(String v) {
@@ -149,6 +210,16 @@ public class SlothyConfig {
                 if (obj.has("cacheExpiry"))            cacheExpiry            = Math.max(5, Math.min(120, obj.get("cacheExpiry").getAsInt()));
                 if (obj.has("citEnabled"))             citEnabled             = obj.get("citEnabled").getAsBoolean();
                 if (obj.has("showLocalPacks"))         showLocalPacks         = obj.get("showLocalPacks").getAsBoolean();
+                if (obj.has("themePreset"))            themePreset            = obj.get("themePreset").getAsString();
+                if (obj.has("themeBg"))                themeBg                = parseColor(obj.get("themeBg").getAsString(), themeBg);
+                if (obj.has("themePanel"))             themePanel             = parseColor(obj.get("themePanel").getAsString(), themePanel);
+                if (obj.has("themeSurface"))           themeSurface           = parseColor(obj.get("themeSurface").getAsString(), themeSurface);
+                if (obj.has("themeAccent"))            themeAccent            = parseColor(obj.get("themeAccent").getAsString(), themeAccent);
+                if (obj.has("themeText"))              themeText              = parseColor(obj.get("themeText").getAsString(), themeText);
+                if (obj.has("themeMuted"))             themeMuted             = parseColor(obj.get("themeMuted").getAsString(), themeMuted);
+                if (obj.has("themeBorder"))            themeBorder            = parseColor(obj.get("themeBorder").getAsString(), themeBorder);
+                if (obj.has("killTotemTexture"))       killTotemTexture       = obj.get("killTotemTexture").getAsString();
+                if (obj.has("killTotemSound"))         killTotemSound         = obj.get("killTotemSound").getAsString();
             }
             if (voterId == null || voterId.isBlank()) {
                 voterId = UUID.randomUUID().toString();
@@ -179,10 +250,35 @@ public class SlothyConfig {
         obj.addProperty("cacheExpiry",            cacheExpiry);
         obj.addProperty("citEnabled",             citEnabled);
         obj.addProperty("showLocalPacks",         showLocalPacks);
+        obj.addProperty("themePreset",            themePreset == null ? "forest" : themePreset);
+        obj.addProperty("themeBg",                colorHex(themeBg));
+        obj.addProperty("themePanel",             colorHex(themePanel));
+        obj.addProperty("themeSurface",           colorHex(themeSurface));
+        obj.addProperty("themeAccent",            colorHex(themeAccent));
+        obj.addProperty("themeText",              colorHex(themeText));
+        obj.addProperty("themeMuted",             colorHex(themeMuted));
+        obj.addProperty("themeBorder",            colorHex(themeBorder));
+        obj.addProperty("killTotemTexture",       killTotemTexture);
+        obj.addProperty("killTotemSound",         killTotemSound);
         try {
             Files.writeString(CONFIG_PATH, GSON.toJson(obj));
         } catch (IOException e) {
             SlothyHubMod.LOGGER.error("Failed to save SlothyHub config", e);
         }
+    }
+
+    private static String colorHex(int argb) {
+        return String.format("#%06X", argb & 0xFFFFFF);
+    }
+
+    private static int parseColor(String raw, int fallback) {
+        if (raw == null || raw.isBlank()) return fallback;
+        try {
+            String s = raw.trim();
+            if (s.startsWith("#")) s = s.substring(1);
+            if (s.length() == 6) return 0xFF000000 | Integer.parseInt(s, 16);
+            if (s.length() == 8) return (int) Long.parseLong(s, 16);
+        } catch (NumberFormatException ignored) {}
+        return fallback;
     }
 }

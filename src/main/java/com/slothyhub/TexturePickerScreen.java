@@ -1,6 +1,12 @@
 package com.slothyhub;
 
+import com.slothyhub.cit.TextureAnimationUtil;
+import com.slothyhub.builder.ResourceScanHelper;
 import com.slothyhub.compat.DrawHelper;
+import com.slothyhub.compat.Identifiers;
+import com.slothyhub.compat.InputCompat;
+import com.slothyhub.local.LocalPackManager;
+import com.slothyhub.kill.KillEffectAssets;
 import com.slothyhub.ui.CustomButton;
 import com.slothyhub.ui.CustomButtonBase;
 import com.slothyhub.ui.Ui;
@@ -8,9 +14,9 @@ import net.minecraft.class_1011;
 import net.minecraft.class_1043;
 import net.minecraft.class_2561;
 import net.minecraft.class_2960;
+import net.minecraft.class_3300;
 import net.minecraft.class_310;
 import net.minecraft.class_332;
-import net.minecraft.class_342;
 import net.minecraft.class_364;
 import net.minecraft.class_4068;
 import net.minecraft.class_437;
@@ -33,13 +39,14 @@ public class TexturePickerScreen extends class_437 {
 
     enum ParticleKind { NONE, GOLDEN_CRIT, CRITICAL_HIT, ENCHANT_HIT }
 
-    enum SlotCategory { SWORDS, GUI, PARTICLES, ITEMS }
+    enum SlotCategory { SWORDS, GUI, PARTICLES, ITEMS, KILL_FX }
 
     record SlotDef(String display, String primaryItem, String[] altItems,
                    String defaultCitName, String outputBaseName, String emoji,
                    boolean vanillaTexture, String vanillaOutputPath,
                    String[] exactPaths, String[] textureDirs, String[] textureKeywords,
-                   ParticleKind particleKind, SlotCategory category, TexFolder defaultFolder) {}
+                   ParticleKind particleKind, SlotCategory category, TexFolder defaultFolder,
+                   String soundOutputBase) {}
 
     enum TexFolder {
         ITEM("item",      "assets/minecraft/textures/item/",      "item"),
@@ -54,42 +61,50 @@ public class TexturePickerScreen extends class_437 {
     }
 
     private static final SlotDef[] SLOTS = {
-        new SlotDef("Noob Sword",    "netherite_sword", new String[]{"diamond_sword"}, "Noob Sword",    "noob_sword",    "⚔", false, null, new String[]{}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.SWORDS, TexFolder.ITEM),
-        new SlotDef("Good Sword",    "netherite_sword", new String[]{"diamond_sword"}, "Good Sword",    "good_sword",    "⚔", false, null, new String[]{}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.SWORDS, TexFolder.ITEM),
-        new SlotDef("Pro Sword",     "netherite_sword", new String[]{"diamond_sword"}, "Pro Sword",     "pro_sword",     "⚔", false, null, new String[]{}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.SWORDS, TexFolder.ITEM),
-        new SlotDef("Perfect Sword", "netherite_sword", new String[]{"diamond_sword"}, "Perfect Sword", "perfect_sword", "⚔", false, null, new String[]{}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.SWORDS, TexFolder.ITEM),
+        new SlotDef("Noob Sword",    "netherite_sword", new String[]{"diamond_sword"}, "Noob Sword",    "noob_sword",    "⚔", false, null, new String[]{}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.SWORDS, TexFolder.ITEM, null),
+        new SlotDef("Good Sword",    "netherite_sword", new String[]{"diamond_sword"}, "Good Sword",    "good_sword",    "⚔", false, null, new String[]{}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.SWORDS, TexFolder.ITEM, null),
+        new SlotDef("Pro Sword",     "netherite_sword", new String[]{"diamond_sword"}, "Pro Sword",     "pro_sword",     "⚔", false, null, new String[]{}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.SWORDS, TexFolder.ITEM, null),
+        new SlotDef("Perfect Sword", "netherite_sword", new String[]{"diamond_sword"}, "Perfect Sword", "perfect_sword", "⚔", false, null, new String[]{}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.SWORDS, TexFolder.ITEM, null),
         new SlotDef("Hippo Sword",   "dead_tube_coral", new String[]{}, null, "dead_tube_coral", "🦛", true,
             "assets/minecraft/textures/block/dead_tube_coral.png",
-            new String[]{"assets/minecraft/textures/block/dead_tube_coral.png"}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.SWORDS, TexFolder.BLOCK),
-        new SlotDef("Warden Sword",  "netherite_sword", new String[]{"diamond_sword"}, "Warden Sword",  "warden_sword",  "🌑", false, null, new String[]{}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.SWORDS, TexFolder.ITEM),
-        new SlotDef("Golden Crit",   "potion", new String[]{}, null, "golden_crit",   "✨", true, "assets/minecraft/textures/particle/golden_crit.png", new String[]{}, new String[]{"assets/minecraft/textures/particle/"}, new String[]{"golden_crit"}, ParticleKind.GOLDEN_CRIT, SlotCategory.PARTICLES, TexFolder.PARTICLES),
-        new SlotDef("Critical Hit",  "potion", new String[]{}, null, "critical_hit",  "💥", true, "assets/minecraft/textures/particle/critical_hit.png", new String[]{}, new String[]{"assets/minecraft/textures/particle/"}, new String[]{"critical_hit"}, ParticleKind.CRITICAL_HIT, SlotCategory.PARTICLES, TexFolder.PARTICLES),
-        new SlotDef("Enchant Hit",   "potion", new String[]{}, null, "enchanted_hit", "✦", true, "assets/minecraft/textures/particle/enchanted_hit.png", new String[]{}, new String[]{"assets/minecraft/textures/particle/"}, new String[]{"enchanted_hit"}, ParticleKind.ENCHANT_HIT, SlotCategory.PARTICLES, TexFolder.PARTICLES),
+            new String[]{"assets/minecraft/textures/block/dead_tube_coral.png"}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.SWORDS, TexFolder.BLOCK, null),
+        new SlotDef("Warden Sword",  "netherite_sword", new String[]{"diamond_sword"}, "Warden Sword",  "warden_sword",  "🌑", false, null, new String[]{}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.SWORDS, TexFolder.ITEM, null),
+        new SlotDef("Golden Crit",   "potion", new String[]{}, null, "golden_crit",   "✨", true, "assets/minecraft/textures/particle/golden_crit.png", new String[]{}, new String[]{"assets/minecraft/textures/particle/"}, new String[]{"golden_crit"}, ParticleKind.GOLDEN_CRIT, SlotCategory.PARTICLES, TexFolder.PARTICLES, null),
+        new SlotDef("Critical Hit",  "potion", new String[]{}, null, "critical_hit",  "💥", true, "assets/minecraft/textures/particle/critical_hit.png", new String[]{}, new String[]{"assets/minecraft/textures/particle/"}, new String[]{"critical_hit"}, ParticleKind.CRITICAL_HIT, SlotCategory.PARTICLES, TexFolder.PARTICLES, null),
+        new SlotDef("Enchant Hit",   "potion", new String[]{}, null, "enchanted_hit", "✦", true, "assets/minecraft/textures/particle/enchanted_hit.png", new String[]{}, new String[]{"assets/minecraft/textures/particle/"}, new String[]{"enchanted_hit"}, ParticleKind.ENCHANT_HIT, SlotCategory.PARTICLES, TexFolder.PARTICLES, null),
         new SlotDef("Hotbar",        "potion", new String[]{}, null, "hotbar",        "▣", true, "assets/minecraft/textures/gui/sprites/hud/hotbar.png",
-            new String[]{"assets/minecraft/textures/gui/sprites/hud/hotbar.png"}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.GUI, TexFolder.GUI),
+            new String[]{"assets/minecraft/textures/gui/sprites/hud/hotbar.png"}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.GUI, TexFolder.GUI, null),
         new SlotDef("Hotbar Select", "potion", new String[]{}, null, "hotbar_selection", "◈", true, "assets/minecraft/textures/gui/sprites/hud/hotbar_selection.png",
-            new String[]{"assets/minecraft/textures/gui/sprites/hud/hotbar_selection.png"}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.GUI, TexFolder.GUI),
+            new String[]{"assets/minecraft/textures/gui/sprites/hud/hotbar_selection.png"}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.GUI, TexFolder.GUI, null),
         new SlotDef("Offhand Left",  "potion", new String[]{}, null, "hotbar_offhand_left", "◧", true, "assets/minecraft/textures/gui/sprites/hud/hotbar_offhand_left.png",
-            new String[]{"assets/minecraft/textures/gui/sprites/hud/hotbar_offhand_left.png"}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.GUI, TexFolder.GUI),
+            new String[]{"assets/minecraft/textures/gui/sprites/hud/hotbar_offhand_left.png"}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.GUI, TexFolder.GUI, null),
         new SlotDef("Offhand Right", "potion", new String[]{}, null, "hotbar_offhand_right", "◨", true, "assets/minecraft/textures/gui/sprites/hud/hotbar_offhand_right.png",
-            new String[]{"assets/minecraft/textures/gui/sprites/hud/hotbar_offhand_right.png"}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.GUI, TexFolder.GUI),
+            new String[]{"assets/minecraft/textures/gui/sprites/hud/hotbar_offhand_right.png"}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.GUI, TexFolder.GUI, null),
         new SlotDef("Heart Full", "potion", new String[]{}, null, "heart_full", "♥", true,
             "assets/minecraft/textures/gui/sprites/hud/heart/full.png",
-            new String[]{"assets/minecraft/textures/gui/sprites/hud/heart/full.png"}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.GUI, TexFolder.GUI),
+            new String[]{"assets/minecraft/textures/gui/sprites/hud/heart/full.png"}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.GUI, TexFolder.GUI, null),
         new SlotDef("Heart Half", "potion", new String[]{}, null, "heart_half", "♡", true,
             "assets/minecraft/textures/gui/sprites/hud/heart/half.png",
-            new String[]{"assets/minecraft/textures/gui/sprites/hud/heart/half.png"}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.GUI, TexFolder.GUI),
+            new String[]{"assets/minecraft/textures/gui/sprites/hud/heart/half.png"}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.GUI, TexFolder.GUI, null),
         new SlotDef("Absorption Full", "potion", new String[]{}, null, "heart_absorption_full", "💛", true,
             "assets/minecraft/textures/gui/sprites/hud/heart/absorbing_full.png",
-            new String[]{"assets/minecraft/textures/gui/sprites/hud/heart/absorbing_full.png"}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.GUI, TexFolder.GUI),
+            new String[]{"assets/minecraft/textures/gui/sprites/hud/heart/absorbing_full.png"}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.GUI, TexFolder.GUI, null),
         new SlotDef("Absorption Half", "potion", new String[]{}, null, "heart_absorption_half", "💛", true,
             "assets/minecraft/textures/gui/sprites/hud/heart/absorbing_half.png",
-            new String[]{"assets/minecraft/textures/gui/sprites/hud/heart/absorbing_half.png"}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.GUI, TexFolder.GUI),
+            new String[]{"assets/minecraft/textures/gui/sprites/hud/heart/absorbing_half.png"}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.GUI, TexFolder.GUI, null),
         new SlotDef("Inventory",     "potion", new String[]{}, null, "inventory",     "🎒", true, "assets/minecraft/textures/gui/container/inventory.png",
-            new String[]{"assets/minecraft/textures/gui/container/inventory.png"}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.GUI, TexFolder.GUI),
-        new SlotDef("Fireworks",     "firework_rocket", new String[]{}, null, "fireworks",   "🎆", true, "assets/minecraft/textures/item/firework_rocket.png", new String[]{}, new String[]{"assets/minecraft/textures/item/"}, new String[]{"firework"}, ParticleKind.NONE, SlotCategory.ITEMS, TexFolder.ITEM),
-        new SlotDef("Golden Apple",  "golden_apple", new String[]{}, null, "golden_apple", "🍎", true, "assets/minecraft/textures/item/golden_apple.png", new String[]{}, new String[]{"assets/minecraft/textures/item/"}, new String[]{"golden_apple"}, ParticleKind.NONE, SlotCategory.ITEMS, TexFolder.ITEM),
-        new SlotDef("Offhands",      "cornflower", new String[]{}, null, "cornflower",  "🌸", true, "assets/minecraft/textures/item/cornflower.png", new String[]{}, new String[]{"assets/minecraft/textures/item/", "assets/minecraft/textures/block/"}, new String[]{"cornflower"}, ParticleKind.NONE, SlotCategory.ITEMS, TexFolder.ITEM),
+            new String[]{"assets/minecraft/textures/gui/container/inventory.png"}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.GUI, TexFolder.GUI, null),
+        new SlotDef("Fireworks",     "firework_rocket", new String[]{}, null, "fireworks",   "🎆", true, "assets/minecraft/textures/item/firework_rocket.png", new String[]{}, new String[]{"assets/minecraft/textures/item/"}, new String[]{"firework"}, ParticleKind.NONE, SlotCategory.ITEMS, TexFolder.ITEM, null),
+        new SlotDef("Golden Apple",  "golden_apple", new String[]{}, null, "golden_apple", "🍎", true, "assets/minecraft/textures/item/golden_apple.png", new String[]{}, new String[]{"assets/minecraft/textures/item/"}, new String[]{"golden_apple"}, ParticleKind.NONE, SlotCategory.ITEMS, TexFolder.ITEM, null),
+        new SlotDef("Offhands",      "cornflower", new String[]{}, null, "cornflower",  "🌸", true, "assets/minecraft/textures/item/cornflower.png", new String[]{}, new String[]{"assets/minecraft/textures/item/", "assets/minecraft/textures/block/"}, new String[]{"cornflower"}, ParticleKind.NONE, SlotCategory.ITEMS, TexFolder.ITEM, null),
+        new SlotDef("Totem of Undying", "totem_of_undying", new String[]{}, null, "totem_of_undying", "♣", true,
+            "assets/minecraft/textures/item/totem_of_undying.png",
+            new String[]{"assets/minecraft/textures/item/totem_of_undying.png"},
+            new String[]{"assets/minecraft/textures/item/"}, new String[]{"totem"},
+            ParticleKind.NONE, SlotCategory.KILL_FX, TexFolder.ITEM, null),
+        new SlotDef("Totem Pop Sound", "totem_of_undying", new String[]{}, null, "totem_kill_sound", "🔊", false, null,
+            new String[]{}, new String[]{"assets/minecraft/sounds/"}, new String[]{"totem", "use_totem"},
+            ParticleKind.NONE, SlotCategory.KILL_FX, TexFolder.ITEM, "kill/totem_pop"),
     };
 
     private static final int GOLDEN_CRIT_SLOT = slotIndex(ParticleKind.GOLDEN_CRIT);
@@ -120,7 +135,9 @@ public class TexturePickerScreen extends class_437 {
 
     /** Golden Crit and Critical Hit are mutually exclusive; heart full/half pairs stay in sync per pack. */
     private void setSlotSelection(int slotIdx, int textureIdx) {
+        int prev = selections.getOrDefault(slotIdx, -1);
         selections.put(slotIdx, textureIdx);
+        if (textureIdx >= 0 && textureIdx != prev) Ui.playClick();
         if (textureIdx >= 0) {
             if (slotIdx == GOLDEN_CRIT_SLOT) selections.put(CRITICAL_HIT_SLOT, -1);
             else if (slotIdx == CRITICAL_HIT_SLOT) selections.put(GOLDEN_CRIT_SLOT, -1);
@@ -189,15 +206,6 @@ public class TexturePickerScreen extends class_437 {
 
     private static final int CATEGORY_H = 22;
 
-    private static final int BG      = Ui.COL_BG;
-    private static final int PANEL   = Ui.COL_PANEL;
-    private static final int SURFACE = Ui.COL_SURFACE;
-    private static final int ACCENT  = Ui.COL_ACCENT;
-    private static final int DANGER  = Ui.COL_DANGER;
-    private static final int TEXT    = Ui.COL_TEXT;
-    private static final int MUTED   = Ui.COL_MUTED;
-    private static final int BORDER  = Ui.COL_BORDER;
-
     private static int configTop() { return HEADER + CATEGORY_H; }
 
     private static String categoryLabel(SlotCategory c) {
@@ -206,6 +214,7 @@ public class TexturePickerScreen extends class_437 {
             case GUI -> "GUI";
             case PARTICLES -> "Potions";
             case ITEMS -> "Items";
+            case KILL_FX -> "Kill FX";
         };
     }
     private static final int DLG_W = 280;
@@ -237,7 +246,6 @@ public class TexturePickerScreen extends class_437 {
     private final Map<Integer, List<TextureOption>> discovered = new LinkedHashMap<>();
     private final Map<Integer, Integer> selections  = new LinkedHashMap<>();
     private final Map<Integer, String>  customNames = new HashMap<>();
-    private boolean suppressNameListener = false;
     private final Map<Integer, TexFolder> folders   = new HashMap<>();
 
     private String packName = "My Custom Pack";
@@ -252,13 +260,19 @@ public class TexturePickerScreen extends class_437 {
     private double texScroll = 0, texScrollTarget = 0;
     private final Map<Integer, Float> itemHover = new HashMap<>();
     private final Map<String, Float> texHover = new HashMap<>();
+    private final Map<Integer, Float> slotCheckAnim = new HashMap<>();
 
-    private class_342 nameField;
-    private class_342 searchField;
+    private String citNameEdit = "";
+    private boolean citNameFocused = false;
+    private int citBarX, citBarY, citBarW, citBarH;
     private String packNameDraft = "My Custom Pack";
     private String searchQuery = "";
+    private boolean searchFocused = false;
+    private int searchBarX, searchBarY, searchBarW, searchBarH;
     private SlotCategory activeCategory = SlotCategory.SWORDS;
     private final Map<String, class_2960> texThumbs = new HashMap<>();
+    private final Map<String, int[]> texThumbSizes = new HashMap<>();
+    private final InputCompat.Poller inputPoller = new InputCompat.Poller();
 
     public TexturePickerScreen(class_437 parent) {
         super(class_2561.method_43470("Texture Builder"));
@@ -267,39 +281,6 @@ public class TexturePickerScreen extends class_437 {
 
     @Override
     protected void method_25426() {
-        int nfX = LEFT_W + PAD + field_22793.method_1727("CIT Name  ") + 2;
-        int nfW = Math.min(220, field_22789 - nfX - PAD);
-        int citY = configTop() + 24;
-        nameField = new class_342(field_22793, nfX, citY, nfW, 12,
-            class_2561.method_43470("CIT name"));
-        positionTextField(nameField, nfX, citY, nfW, 12);
-        nameField.method_1858(false);
-        nameField.method_1880(40);
-        suppressNameListener = true;
-        nameField.method_1867(defaultNameForSlot(0));
-        suppressNameListener = false;
-        nameField.method_47404(class_2561.method_43470("e.g. Pro Sword"));
-        nameField.method_1868(TEXT);
-        nameField.method_1863(v -> {
-            if (suppressNameListener) return;
-            customNames.put(selectedSlot, v.isBlank() ? null : v.trim());
-        });
-        method_37063(nameField);
-
-        int searchTop = configTop() + CFG_H;
-        int searchLabelW = field_22793.method_1727("Search") + 8;
-        int searchW = field_22789 - LEFT_W - PAD * 2 - searchLabelW;
-        searchField = new class_342(field_22793, LEFT_W + PAD + searchLabelW, searchTop + 4,
-            Math.max(80, searchW), 12, class_2561.method_43470("Search"));
-        positionTextField(searchField, LEFT_W + PAD + searchLabelW, searchTop + 4,
-            Math.max(80, searchW), 12);
-        searchField.method_1858(false);
-        searchField.method_1880(60);
-        searchField.method_47404(class_2561.method_43470("Search textures…"));
-        searchField.method_1868(TEXT);
-        searchField.method_1863(q -> { searchQuery = q; texScroll = texScrollTarget = 0; });
-        method_37063(searchField);
-
         int bw = 124, bh = 26, gap = 10;
         int bx = field_22789 / 2 - bw - gap / 2;
         int by = field_22790 - FOOTER + (FOOTER - bh) / 2;
@@ -311,20 +292,6 @@ public class TexturePickerScreen extends class_437 {
         executor.submit(this::scanResourcePacks);
         for (int i = 0; i < SLOTS.length; i++)
             folders.putIfAbsent(i, SLOTS[i].defaultFolder());
-        updateSlotWidgets();
-
-    }
-
-    /** MC 1.21.8: {@code method_55444} updates different fields than {@code method_46426}/{@code method_46427} used when drawing. */
-    private static void positionTextField(class_342 field, int x, int y, int w, int h) {
-        field.method_46421(x);
-        field.method_46419(y);
-        field.method_55444(x, y, w, h);
-    }
-
-    private static void setTextFieldVisible(class_342 field, boolean visible) {
-        if (field == null) return;
-        field.field_22764 = visible;
     }
 
     @Override
@@ -372,12 +339,13 @@ public class TexturePickerScreen extends class_437 {
         return others > 0;
     }
 
-    /** Persist the shared CIT name field into the slot map before switching away. */
-    private void saveNameFieldForSlot(int slotIdx) {
-        if (nameField == null || slotIdx < 0 || slotIdx >= SLOTS.length) return;
+    /** Persist the CIT name edit into the slot map before switching away. */
+    private void commitCitNameEdit(int slotIdx) {
+        if (slotIdx < 0 || slotIdx >= SLOTS.length) return;
         if (SLOTS[slotIdx].vanillaTexture()) return;
-        String text = nameField.method_1882().trim();
+        String text = (citNameFocused ? citNameEdit : defaultNameForSlot(slotIdx)).trim();
         customNames.put(slotIdx, text.isBlank() ? null : text);
+        citNameFocused = false;
     }
 
     private TexFolder effectiveFolder(int idx) {
@@ -398,27 +366,21 @@ public class TexturePickerScreen extends class_437 {
         Map<Integer, List<TextureOption>> result = new LinkedHashMap<>();
         for (int i = 0; i < SLOTS.length; i++) result.put(i, new ArrayList<>());
 
+        int packCount = 0;
         try {
-            if (Files.isDirectory(rpDir)) {
-                List<Path> packs;
-                try (Stream<Path> s = Files.list(rpDir)) {
-                    packs = s.filter(p -> {
-                        String n = p.getFileName().toString();
-                        if (n.startsWith(".")) return false;
-                        if (Files.isDirectory(p)) return Files.exists(p.resolve("pack.mcmeta"));
-                        return n.toLowerCase(Locale.ROOT).endsWith(".zip");
-                    }).toList();
-                }
-                int total = packs.size(), done = 0;
-                for (Path pack : packs) {
-                    if (BuiltPackLibrary.shouldSkipForScanner(pack)) continue;
-                    int d = ++done;
-                    class_310.method_1551().execute(() ->
-                        scanStatus = "Scanning " + pack.getFileName() + " (" + d + "/" + total + ")");
-                    if (Files.isDirectory(pack)) scanFolder(pack, result);
-                    else                         scanZip(pack, result);
-                    scanVanillaTextures(pack, Files.isDirectory(pack), packLabelFrom(pack), result);
-                }
+            List<Path> packs = ResourceScanHelper.collectPackRoots(rpDir, LocalPackManager.getLocalPackDir());
+            packCount = packs.size();
+            int done = 0;
+            for (Path pack : packs) {
+                if (BuiltPackLibrary.shouldSkipForScanner(pack)) continue;
+                int d = ++done;
+                final int total = packCount;
+                class_310.method_1551().execute(() ->
+                    scanStatus = "Scanning " + pack.getFileName() + " (" + d + "/" + total + ")");
+                if (Files.isDirectory(pack)) scanFolder(pack, result);
+                else                         scanZip(pack, result);
+                scanVanillaTextures(pack, Files.isDirectory(pack), packLabelFrom(pack), result);
+                scanSounds(pack, Files.isDirectory(pack), packLabelFrom(pack), result);
             }
         } catch (Exception e) {
             SlothyHubMod.LOGGER.warn("TexturePicker scan error: {}", e.getMessage());
@@ -426,14 +388,106 @@ public class TexturePickerScreen extends class_437 {
 
         mergeSwordPoolIntoHippo(result);
 
-        class_310.method_1551().execute(() -> {
+        class_310 mc = class_310.method_1551();
+        java.util.concurrent.CountDownLatch loaded = new java.util.concurrent.CountDownLatch(1);
+        mc.execute(() -> {
+            try {
+                scanStatus = "Scanning active resource packs…";
+                int added = scanLoadedResourcePacks(result);
+                SlothyHubMod.LOGGER.info("TexturePicker: loaded-resource scan added {} options", added);
+            } catch (Exception e) {
+                SlothyHubMod.LOGGER.warn("TexturePicker loaded-resource scan error: {}", e.getMessage());
+            } finally {
+                loaded.countDown();
+            }
+        });
+        try { loaded.await(20, java.util.concurrent.TimeUnit.SECONDS); } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+
+        mergeSwordPoolIntoHippo(result);
+        int totalOpts = result.values().stream().mapToInt(List::size).sum();
+        final int finalPackCount = packCount;
+        final int finalTotalOpts = totalOpts;
+
+        mc.execute(() -> {
             discovered.clear();
             discovered.putAll(result);
             scanning = false;
-            SlothyHubMod.LOGGER.info("TexturePicker: {} options across {} slots",
-                result.values().stream().mapToInt(List::size).sum(), SLOTS.length);
+            if (finalTotalOpts == 0) {
+                scanStatus = finalPackCount == 0
+                    ? "No packs found — add packs to resourcepacks/ or slothyhub-local/"
+                    : "No matching textures in " + finalPackCount + " pack(s)";
+            }
+            SlothyHubMod.LOGGER.info("TexturePicker: {} options across {} slots ({} pack roots)",
+                finalTotalOpts, SLOTS.length, finalPackCount);
         });
     }
+
+    /** Scan textures from packs currently loaded in-game (includes server resource packs). */
+    private int scanLoadedResourcePacks(Map<Integer, List<TextureOption>> result) {
+        class_3300 manager = ResourceScanHelper.resourceManager();
+        if (manager == null) return 0;
+
+        int added = 0;
+        String packLabel = "Active packs";
+        StreamOpener opener = path -> ResourceScanHelper.openPath(manager, path);
+
+        for (String namespace : ResourceScanHelper.namespaces(manager)) {
+            java.util.Map<class_2960, ?> props = ResourceScanHelper.findResources(manager, namespace, id -> {
+                String path = id.method_12832();
+                return path.endsWith(".properties") && path.contains("cit/");
+            });
+            for (var entry : props.entrySet()) {
+                class_2960 rid = entry.getKey();
+                try (InputStream in = ResourceScanHelper.openResource(entry.getValue())) {
+                    if (in == null) continue;
+                    String propPath = "assets/" + rid.method_12836() + "/" + rid.method_12832();
+                    int before = countOptions(result);
+                    parseCitEntry(packLabel, null, false, propPath, entryDir(propPath),
+                        loadProps(in), opener, result);
+                    added += countOptions(result) - before;
+                } catch (Exception ignored) {}
+            }
+        }
+
+        java.util.Map<class_2960, ?> pngs = ResourceScanHelper.findResources(manager, "minecraft", id -> {
+            String path = id.method_12832();
+            return path.endsWith(".png") && path.startsWith("textures/") && !path.contains("/cit/");
+        });
+        for (var entry : pngs.entrySet()) {
+            class_2960 rid = entry.getKey();
+            String entryPath = "assets/minecraft/" + rid.method_12832();
+            try (InputStream in = ResourceScanHelper.openResource(entry.getValue())) {
+                if (in == null) continue;
+                int before = countOptions(result);
+                addVanillaTextureOption(packLabel, null, false, entryPath, in.readAllBytes(), result);
+                added += countOptions(result) - before;
+            } catch (Exception ignored) {}
+        }
+
+        java.util.Map<class_2960, ?> oggs = ResourceScanHelper.findResources(manager, "minecraft", id ->
+            id.method_12832().endsWith(".ogg") && id.method_12832().startsWith("sounds/"));
+        for (var entry : oggs.entrySet()) {
+            class_2960 rid = entry.getKey();
+            String entryPath = "assets/minecraft/" + rid.method_12832();
+            try (InputStream in = ResourceScanHelper.openResource(entry.getValue())) {
+                if (in == null) continue;
+                int before = countOptions(result);
+                addSoundOption(packLabel, null, false, entryPath, in.readAllBytes(), result);
+                added += countOptions(result) - before;
+            } catch (Exception ignored) {}
+        }
+
+        return added;
+    }
+
+    private static int countOptions(Map<Integer, List<TextureOption>> result) {
+        return result.values().stream().mapToInt(List::size).sum();
+    }
+
+    @FunctionalInterface
+    private interface StreamOpener { InputStream open(String path) throws IOException; }
 
     private static String packLabelFrom(Path pack) {
         String n = pack.getFileName().toString();
@@ -487,6 +541,7 @@ public class TexturePickerScreen extends class_437 {
 
         for (int si = 0; si < SLOTS.length; si++) {
             SlotDef slot = SLOTS[si];
+            if (slot.soundOutputBase() != null) continue;
             if (!slot.vanillaTexture()) continue;
 
             if (slot.exactPaths().length > 0) {
@@ -524,8 +579,78 @@ public class TexturePickerScreen extends class_437 {
         }
     }
 
+    private void scanSounds(Path packPath, boolean isFolder, String packLabel,
+                            Map<Integer, List<TextureOption>> out) {
+        if (isFolder) scanSoundsFolder(packPath, packLabel, out);
+        else scanSoundsZip(packPath, packLabel, out);
+    }
+
+    private void scanSoundsZip(Path zip, String packLabel, Map<Integer, List<TextureOption>> out) {
+        try (java.util.zip.ZipFile zf = new java.util.zip.ZipFile(zip.toFile())) {
+            Enumeration<? extends ZipEntry> all = zf.entries();
+            while (all.hasMoreElements()) {
+                ZipEntry ze = all.nextElement();
+                if (ze.isDirectory()) continue;
+                String entry = ze.getName().replace('\\', '/');
+                if (!entry.toLowerCase(Locale.ROOT).endsWith(".ogg")) continue;
+                if (!entry.contains("assets/minecraft/sounds/")) continue;
+                byte[] data;
+                try (InputStream in = zf.getInputStream(ze)) { data = in.readAllBytes(); }
+                catch (Exception e) { data = new byte[0]; }
+                addSoundOption(packLabel, zip, true, entry, data, out);
+            }
+        } catch (Exception ignored) {}
+    }
+
+    private void scanSoundsFolder(Path folder, String packLabel, Map<Integer, List<TextureOption>> out) {
+        try (Stream<Path> walk = Files.walk(folder)) {
+            for (Path f : walk.filter(p -> !Files.isDirectory(p)).toList()) {
+                String rel = folder.relativize(f).toString().replace('\\', '/');
+                if (!rel.toLowerCase(Locale.ROOT).endsWith(".ogg")) continue;
+                if (!rel.contains("assets/minecraft/sounds/")) continue;
+                byte[] data = new byte[0];
+                try { data = Files.readAllBytes(f); } catch (Exception ignored) {}
+                addSoundOption(packLabel, folder, false, rel, data, out);
+            }
+        } catch (Exception ignored) {}
+    }
+
+    private void addSoundOption(String packLabel, Path packPath, boolean isZip,
+                                String entry, byte[] data,
+                                Map<Integer, List<TextureOption>> out) {
+        String lower = entry.toLowerCase(Locale.ROOT);
+        String fileName = entry.substring(entry.lastIndexOf('/') + 1).replace(".ogg", "");
+
+        for (int si = 0; si < SLOTS.length; si++) {
+            SlotDef slot = SLOTS[si];
+            if (slot.soundOutputBase() == null) continue;
+
+            boolean dirMatch = false;
+            for (String dir : slot.textureDirs()) {
+                if (lower.contains(dir.toLowerCase(Locale.ROOT))) { dirMatch = true; break; }
+            }
+            if (!dirMatch) continue;
+
+            if (slot.textureKeywords().length > 0) {
+                boolean kwMatch = false;
+                for (String kw : slot.textureKeywords()) {
+                    if (fileName.toLowerCase(Locale.ROOT).contains(kw.toLowerCase(Locale.ROOT))
+                        || lower.contains(kw.toLowerCase(Locale.ROOT))) {
+                        kwMatch = true; break;
+                    }
+                }
+                if (!kwMatch) continue;
+            }
+
+            String label = packLabel + " / " + entry.substring(entry.indexOf("sounds/") + 7);
+            TextureOption opt = new TextureOption(label, packPath, isZip, entry, data);
+            List<TextureOption> list = out.get(si);
+            if (list.stream().noneMatch(o -> o.label().equals(label))) list.add(opt);
+        }
+    }
+
     private static boolean packHasEntry(Path packPath, boolean isZip, String entry) {
-        if (entry == null || entry.isBlank()) return false;
+        if (packPath == null || entry == null || entry.isBlank()) return false;
         try {
             if (isZip) {
                 try (java.util.zip.ZipFile zf = new java.util.zip.ZipFile(packPath.toFile())) {
@@ -685,8 +810,6 @@ public class TexturePickerScreen extends class_437 {
         }
     }
 
-    @FunctionalInterface interface StreamOpener { InputStream open(String path) throws IOException; }
-
     private void parseCitEntry(String packLabel, Path packPath, boolean isZip,
                                 String propPath, String propDir, Properties props,
                                 StreamOpener opener, Map<Integer, List<TextureOption>> out) {
@@ -807,20 +930,12 @@ public class TexturePickerScreen extends class_437 {
     }
 
     private void hideBackgroundFields() {
-        setTextFieldVisible(nameField, false);
-        setTextFieldVisible(searchField, false);
+        commitCitNameEdit(selectedSlot);
+        searchFocused = false;
     }
 
     private void restoreBackgroundFields() {
-        if (searchField != null) {
-            int searchTop = configTop() + CFG_H;
-            int searchLabelW = field_22793.method_1727("Search") + 8;
-            int searchW = field_22789 - LEFT_W - PAD * 2 - searchLabelW;
-            positionTextField(searchField, LEFT_W + PAD + searchLabelW, searchTop + 4,
-                Math.max(80, searchW), 12);
-            setTextFieldVisible(searchField, true);
-        }
-        updateSlotWidgets();
+        citNameFocused = false;
     }
 
     private void closeNameDialog() {
@@ -840,7 +955,7 @@ public class TexturePickerScreen extends class_437 {
         if (chosen == 0) { buildStatus = "Select at least one texture first."; buildOk = false; return; }
 
         buildStatus = "Building…"; buildOk = false;
-        saveNameFieldForSlot(selectedSlot);
+        commitCitNameEdit(selectedSlot);
         executor.submit(() -> {
             try {
                 byte[] zipBytes = buildPack();
@@ -850,6 +965,7 @@ public class TexturePickerScreen extends class_437 {
                 class_310.method_1551().execute(() -> {
                     buildStatus = "Saved to resourcepacks/" + libName + ".zip + library";
                     buildOk = true;
+                    KillEffectAssets.invalidate();
                 });
             } catch (Exception e) {
                 SlothyHubMod.LOGGER.error("TexturePicker build failed", e);
@@ -864,7 +980,7 @@ public class TexturePickerScreen extends class_437 {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         try (ZipOutputStream zos = new ZipOutputStream(baos)) {
             putEntry(zos, "pack.mcmeta",
-                PackMetaUtil.buildMcmetaBytes(packName, 34));
+                PackMetaUtil.buildCompatibleMcmetaBytes(packName));
             putEntry(zos, BuiltPackLibrary.BUILT_MARKER, "slothyhub-texture-builder\n");
 
             for (int si = 0; si < SLOTS.length; si++) {
@@ -889,7 +1005,12 @@ public class TexturePickerScreen extends class_437 {
                         String outPath = slot.vanillaOutputPath();
                         putEntry(zos, outPath, png);
                         copyMcmetaIfPresent(zos, opt, outPath);
+                        if (slot.category() == SlotCategory.KILL_FX && outPath.contains("totem_of_undying")) {
+                            SlothyConfig.setKillTotemTexture("minecraft:item/totem_of_undying");
+                        }
                     }
+                } else if (slot.soundOutputBase() != null) {
+                    writeTotemSoundBundle(zos, slot, opt, png);
                 } else {
                     writeCitBundle(zos, slot, opt, png, si);
                 }
@@ -922,20 +1043,42 @@ public class TexturePickerScreen extends class_437 {
         copyMcmetaIfPresent(zos, opt, vanillaPath);
     }
 
+    private void writeTotemSoundBundle(ZipOutputStream zos, SlotDef slot, TextureOption opt, byte[] ogg) throws IOException {
+        String base = slot.soundOutputBase();
+        putEntry(zos, "assets/minecraft/sounds/" + base + ".ogg", ogg);
+        String soundsJson = "{\n  \"item.totem.use\": {\n    \"sounds\": [ \"" + base + "\" ]\n  }\n}\n";
+        putEntry(zos, "assets/minecraft/sounds.json", soundsJson);
+        SlothyConfig.setKillTotemSound("minecraft:item.totem.use");
+    }
+
     private void copyMcmetaIfPresent(ZipOutputStream zos, TextureOption opt, String pngAssetPath) throws IOException {
         String mcmetaPath = pngAssetPath + ".mcmeta";
+        byte[] mcmeta = null;
         if (opt.mcmetaEntry() != null && !opt.mcmetaEntry().isBlank()) {
-            byte[] mcmeta = readOptionalFromPack(opt.packPath(), opt.isZip(), opt.mcmetaEntry());
-            if (mcmeta != null) { putEntry(zos, mcmetaPath, mcmeta); return; }
+            mcmeta = readOptionalFromPack(opt.packPath(), opt.isZip(), opt.mcmetaEntry());
         }
-        String derived = opt.pngEntry() != null ? opt.pngEntry().replace(".png", ".png.mcmeta") : null;
-        if (derived != null) {
-            byte[] mcmeta = readOptionalFromPack(opt.packPath(), opt.isZip(), derived);
-            if (mcmeta != null) putEntry(zos, mcmetaPath, mcmeta);
+        if (mcmeta == null) {
+            String derived = opt.pngEntry() != null ? opt.pngEntry().replace(".png", ".png.mcmeta") : null;
+            if (derived != null) mcmeta = readOptionalFromPack(opt.packPath(), opt.isZip(), derived);
         }
+        if (mcmeta == null && opt.pngEntry() != null) {
+            try {
+                byte[] png = readBytesFromPack(opt.packPath(), opt.isZip(), opt.pngEntry());
+                class_1011 img = class_1011.method_4309(new java.io.ByteArrayInputStream(png));
+                mcmeta = TextureAnimationUtil.ensureMcmeta(null, img.method_4307(), img.method_4323());
+            } catch (Exception ignored) {}
+        } else if (mcmeta != null && opt.pngEntry() != null) {
+            try {
+                byte[] png = readBytesFromPack(opt.packPath(), opt.isZip(), opt.pngEntry());
+                class_1011 img = class_1011.method_4309(new java.io.ByteArrayInputStream(png));
+                mcmeta = TextureAnimationUtil.ensureMcmeta(mcmeta, img.method_4307(), img.method_4323());
+            } catch (Exception ignored) {}
+        }
+        if (mcmeta != null) putEntry(zos, mcmetaPath, mcmeta);
     }
 
     private static byte[] readBytesFromPack(Path packPath, boolean isZip, String entry) throws IOException {
+        if (packPath == null) throw new IOException("No pack path for " + entry);
         if (isZip) {
             try (java.util.zip.ZipFile zf = new java.util.zip.ZipFile(packPath.toFile())) {
                 ZipEntry ze = zf.getEntry(entry);
@@ -963,7 +1106,7 @@ public class TexturePickerScreen extends class_437 {
         itemScroll += (itemScrollTarget - itemScroll) * Math.min(1f, delta * 0.28f);
         texScroll  += (texScrollTarget  - texScroll)  * Math.min(1f, delta * 0.28f);
 
-        ctx.method_25294(0, 0, field_22789, field_22790, BG);
+        ctx.method_25294(0, 0, field_22789, field_22790, Ui.COL_BG);
         if (SlothyConfig.isBackgroundEffects())
             Ui.renderLeafParallax(ctx, field_22789, field_22790, delta);
         Ui.drawCornerVines(ctx, field_22789, field_22790,
@@ -977,6 +1120,8 @@ public class TexturePickerScreen extends class_437 {
         drawTexturePanel(ctx, mx, my, delta);
         drawFooter(ctx);
 
+        inputPoller.poll(mx, my, (x, y, btn) -> method_25402(x, y, btn), null);
+
         if (nameDialogOpen) {
             ctx.method_25294(0, 0, field_22789, field_22790, col(0x000000, 140));
             drawNameDialogPanel(ctx);
@@ -987,29 +1132,30 @@ public class TexturePickerScreen extends class_437 {
         for (class_364 w : method_25396()) {
             if (w instanceof class_4068 d) d.method_25394(ctx, mx, my, delta);
         }
+        Ui.renderSelectionParticles(ctx, delta);
     }
 
     private void drawNameDialogPanel(class_332 ctx) {
         int dx = dialogX(), dy = dialogY();
-        ctx.method_25294(dx, dy, dx + DLG_W, dy + DLG_H, PANEL);
-        ctx.method_25294(dx, dy, dx + DLG_W, dy + 2, ACCENT);
-        Ui.drawPawPrint(ctx, dx + 20, dy + 30, col(ACCENT & 0xFFFFFF, 180), 0.8f);
-        DrawHelper.drawText(ctx, field_22793, "Name your pack", dx + 36, dy + 22, TEXT, false);
-        DrawHelper.drawText(ctx, field_22793, "Pack name", dx + 16, dy + 46, MUTED, false);
-        ctx.method_25294(dx + 14, dy + 54, dx + DLG_W - 14, dy + 72, col(SURFACE & 0xFFFFFF, 180));
-        ctx.method_25294(dx + 14, dy + 71, dx + DLG_W - 14, dy + 72, ACCENT);
+        ctx.method_25294(dx, dy, dx + DLG_W, dy + DLG_H, Ui.COL_PANEL);
+        ctx.method_25294(dx, dy, dx + DLG_W, dy + 2, Ui.COL_ACCENT);
+        Ui.drawPawPrint(ctx, dx + 20, dy + 30, col(Ui.COL_ACCENT & 0xFFFFFF, 180), 0.8f);
+        DrawHelper.drawText(ctx, field_22793, "Name your pack", dx + 36, dy + 22, Ui.COL_TEXT, false);
+        DrawHelper.drawText(ctx, field_22793, "Pack name", dx + 16, dy + 46, Ui.COL_MUTED, false);
+        ctx.method_25294(dx + 14, dy + 54, dx + DLG_W - 14, dy + 72, col(Ui.COL_SURFACE & 0xFFFFFF, 180));
+        ctx.method_25294(dx + 14, dy + 71, dx + DLG_W - 14, dy + 72, Ui.COL_ACCENT);
         int inputX = dx + 18, inputY = dy + 58;
         if (packNameDraft.isBlank()) {
             DrawHelper.drawText(ctx, field_22793, "My Custom Pack", inputX, inputY,
-                col(MUTED & 0xFFFFFF, 140), false);
+                col(Ui.COL_MUTED & 0xFFFFFF, 140), false);
         } else {
-            DrawHelper.drawText(ctx, field_22793, packNameDraft, inputX, inputY, TEXT, false);
+            DrawHelper.drawText(ctx, field_22793, packNameDraft, inputX, inputY, Ui.COL_TEXT, false);
             if ((System.currentTimeMillis() / 500) % 2 == 0) {
                 int cx = inputX + field_22793.method_1727(packNameDraft);
-                ctx.method_25294(cx, inputY - 1, cx + 1, inputY + 10, ACCENT);
+                ctx.method_25294(cx, inputY - 1, cx + 1, inputY + 10, Ui.COL_ACCENT);
             }
         }
-        DrawHelper.drawText(ctx, field_22793, "Enter then click BUILD or press Enter", dx + 16, dy + 78, MUTED, false);
+        DrawHelper.drawText(ctx, field_22793, "Enter then click BUILD or press Enter", dx + 16, dy + 78, Ui.COL_MUTED, false);
     }
 
     private void drawNameDialogButtons(class_332 ctx, int mx, int my) {
@@ -1020,11 +1166,11 @@ public class TexturePickerScreen extends class_437 {
         boolean buildHov = mx >= buildX && mx <= buildX + btnW && my >= btnY && my <= btnY + btnH;
         boolean cancelHov = mx >= cancelX && mx <= cancelX + btnW && my >= btnY && my <= btnY + btnH;
         ctx.method_25294(buildX, btnY, buildX + btnW, btnY + btnH,
-            buildHov ? col(ACCENT & 0xFFFFFF, 230) : col(SURFACE & 0xFFFFFF, 200));
+            buildHov ? col(Ui.COL_ACCENT & 0xFFFFFF, 230) : col(Ui.COL_SURFACE & 0xFFFFFF, 200));
         ctx.method_25294(cancelX, btnY, cancelX + btnW, btnY + btnH,
-            cancelHov ? col(DANGER & 0xFFFFFF, 200) : col(SURFACE & 0xFFFFFF, 160));
-        DrawHelper.drawText(ctx, field_22793, "BUILD", buildX + 18, btnY + 6, buildHov ? BG : ACCENT, false);
-        DrawHelper.drawText(ctx, field_22793, "CANCEL", cancelX + 12, btnY + 6, cancelHov ? BG : MUTED, false);
+            cancelHov ? col(Ui.COL_DANGER & 0xFFFFFF, 200) : col(Ui.COL_SURFACE & 0xFFFFFF, 160));
+        DrawHelper.drawText(ctx, field_22793, "BUILD", buildX + 18, btnY + 6, buildHov ? Ui.COL_BG : Ui.COL_ACCENT, false);
+        DrawHelper.drawText(ctx, field_22793, "CANCEL", cancelX + 12, btnY + 6, cancelHov ? Ui.COL_BG : Ui.COL_MUTED, false);
     }
 
     private void drawCategoryTabs(class_332 ctx, int mx, int my) {
@@ -1035,11 +1181,33 @@ public class TexturePickerScreen extends class_437 {
             boolean sel = c == activeCategory;
             boolean hov = mx >= x && mx <= x + w && my >= y && my <= y + CATEGORY_H - 2;
             ctx.method_25294(x, y, x + w, y + CATEGORY_H - 2,
-                sel ? col(ACCENT & 0xFFFFFF, 40) : (hov ? col(SURFACE & 0xFFFFFF, 120) : col(PANEL & 0xFFFFFF, 80)));
-            DrawHelper.drawText(ctx, field_22793, label, x + 7, y + 5, sel ? ACCENT : MUTED, false);
+                sel ? col(Ui.COL_ACCENT & 0xFFFFFF, 40) : (hov ? col(Ui.COL_SURFACE & 0xFFFFFF, 120) : col(Ui.COL_PANEL & 0xFFFFFF, 80)));
+            DrawHelper.drawText(ctx, field_22793, label, x + 7, y + 5, sel ? Ui.COL_ACCENT : Ui.COL_MUTED, false);
             x += w + 10;
         }
-        ctx.method_25294(0, top + CATEGORY_H - 1, LEFT_W, top + CATEGORY_H, BORDER);
+        ctx.method_25294(0, top + CATEGORY_H - 1, field_22789, top + CATEGORY_H, Ui.COL_BORDER);
+    }
+
+    private boolean handleCategoryTabClick(double mx, double my) {
+        int top = HEADER, y = top + 2;
+        if (my < y || my > y + CATEGORY_H - 2) return false;
+        int tabX = PAD;
+        for (SlotCategory c : SlotCategory.values()) {
+            String label = categoryLabel(c);
+            int w = field_22793.method_1727(label) + 14;
+            if (mx >= tabX && mx <= tabX + w) {
+                activeCategory = c;
+                itemScroll = itemScrollTarget = 0;
+                List<Integer> vis = visibleSlotIndices();
+                if (!vis.isEmpty() && SLOTS[selectedSlot].category() != c) {
+                    commitCitNameEdit(selectedSlot);
+                    selectedSlot = vis.get(0);
+                }
+                return true;
+            }
+            tabX += w + 10;
+        }
+        return false;
     }
 
     private String texThumbKey(TextureOption opt) {
@@ -1053,36 +1221,41 @@ public class TexturePickerScreen extends class_437 {
         if (png == null || png.length == 0) return;
         try {
             class_1011 img = class_1011.method_4309(new ByteArrayInputStream(png));
+            img = TextureAnimationUtil.firstFrameFromImage(img, null);
+            if (img == null) return;
+            int texW = img.method_4307();
+            int texH = img.method_4323();
             class_1043 tex = DrawHelper.createNativeTexture("slothyhub_tex_" + Math.abs(key.hashCode()), img);
             if (tex == null) return;
-            class_2960 id = class_2960.method_60655("slothyhub", "texthumb/" + Math.abs(key.hashCode()));
-            class_310.method_1551().method_1531().method_4616(id, tex);
+            class_2960 id = Identifiers.of("slothyhub", "texthumb/" + Math.abs(key.hashCode()));
+            DrawHelper.registerDynamicTexture(id, tex, img);
             texThumbs.put(key, id);
+            texThumbSizes.put(key, new int[]{texW, texH});
         } catch (Exception ignored) {}
     }
 
     private void drawHeader(class_332 ctx) {
         float phase = (float)(System.currentTimeMillis() % 4000L) / 4000f;
-        ctx.method_25294(0, 0, field_22789, HEADER, PANEL);
-        ctx.method_25294(0, 0, field_22789, 2, ACCENT);
-        ctx.method_25294(0, HEADER - 1, field_22789, HEADER, BORDER);
+        ctx.method_25294(0, 0, field_22789, HEADER, Ui.COL_PANEL);
+        ctx.method_25294(0, 0, field_22789, 2, Ui.COL_ACCENT);
+        ctx.method_25294(0, HEADER - 1, field_22789, HEADER, Ui.COL_BORDER);
 
-        DrawHelper.drawText(ctx, field_22793, "←", PAD, (HEADER - 9) / 2, MUTED, false);
-        Ui.drawSlothBadge(ctx, field_22793, PAD + 14, (HEADER - 14) / 2, phase);
+        DrawHelper.drawText(ctx, field_22793, "←", PAD + 22, (HEADER - 9) / 2, Ui.COL_MUTED, false);
         DrawHelper.drawText(ctx, field_22793, "TEXTURE BUILDER",
-            PAD + 38, (HEADER - 9) / 2, ACCENT, false);
+            PAD + 34, (HEADER - 9) / 2, Ui.COL_ACCENT, false);
+        Ui.drawSlothLogo(ctx, PAD, (HEADER - 16) / 2, phase);
 
         long done = selections.values().stream().filter(v -> v != null && v >= 0).count();
         String info = done + "/" + SLOTS.length + " slots";
         DrawHelper.drawText(ctx, field_22793, info,
-            field_22789 - PAD - field_22793.method_1727(info), (HEADER - 9) / 2, MUTED, false);
+            field_22789 - PAD - field_22793.method_1727(info), (HEADER - 9) / 2, Ui.COL_MUTED, false);
     }
 
     private void drawSlotList(class_332 ctx, int mx, int my, float delta) {
         int top = HEADER + CATEGORY_H, bot = field_22790 - FOOTER;
-        ctx.method_25294(0, top, LEFT_W, bot, PANEL);
-        ctx.method_25294(LEFT_W - 1, top, LEFT_W, bot, BORDER);
-        DrawHelper.drawText(ctx, field_22793, categoryLabel(activeCategory), PAD, top + 6, MUTED, false);
+        ctx.method_25294(0, top, LEFT_W, bot, Ui.COL_PANEL);
+        ctx.method_25294(LEFT_W - 1, top, LEFT_W, bot, Ui.COL_BORDER);
+        DrawHelper.drawText(ctx, field_22793, categoryLabel(activeCategory), PAD, top + 6, Ui.COL_MUTED, false);
 
         List<Integer> visible = visibleSlotIndices();
         ctx.method_44379(0, top + 18, LEFT_W, bot);
@@ -1095,23 +1268,29 @@ public class TexturePickerScreen extends class_437 {
             itemHover.put(i, ht);
 
             if (sel) {
-                ctx.method_25294(0, y, LEFT_W, y + ITEM_H, col(ACCENT & 0xFFFFFF, 28));
-                ctx.method_25294(0, y, 3, y + ITEM_H, ACCENT);
+                ctx.method_25294(0, y, LEFT_W, y + ITEM_H, col(Ui.COL_ACCENT & 0xFFFFFF, 28));
+                ctx.method_25294(0, y, 3, y + ITEM_H, Ui.COL_ACCENT);
             } else if (ht > 0.02f) {
-                ctx.method_25294(0, y, LEFT_W, y + ITEM_H, col(SURFACE & 0xFFFFFF, (int)(140 * ht)));
+                ctx.method_25294(0, y, LEFT_W, y + ITEM_H, col(Ui.COL_SURFACE & 0xFFFFFF, (int)(140 * ht)));
             }
 
             int textY = y + (ITEM_H - 9) / 2;
-            int fg = sel ? ACCENT : lerp(MUTED, TEXT, ht);
+            int fg = sel ? Ui.COL_ACCENT : lerp(Ui.COL_MUTED, Ui.COL_TEXT, ht);
             DrawHelper.drawText(ctx, field_22793, SLOTS[i].emoji() + "  " + SLOTS[i].display(), PAD + 4, textY, fg, false);
 
             int cnt = discovered.getOrDefault(i, List.of()).size();
             DrawHelper.drawText(ctx, field_22793, scanning ? "…" : (cnt == 0 ? "—" : String.valueOf(cnt)),
-                LEFT_W - PAD - 16, textY, cnt == 0 && !scanning ? DANGER : MUTED, false);
-            if (selections.getOrDefault(i, -1) >= 0)
-                DrawHelper.drawText(ctx, field_22793, "✓", LEFT_W - 10, textY, ACCENT, false);
+                LEFT_W - PAD - 22, textY, cnt == 0 && !scanning ? Ui.COL_DANGER : Ui.COL_MUTED, false);
+            boolean hasSel = selections.getOrDefault(i, -1) >= 0;
+            float checkT = slotCheckAnim.getOrDefault(i, hasSel ? 1f : 0f);
+            checkT = Ui.tickCheckAnim(checkT, hasSel, delta);
+            slotCheckAnim.put(i, checkT);
+            if (checkT > 0.01f) {
+                int ckX = LEFT_W - PAD - 12, ckY = y + (ITEM_H - 8) / 2;
+                Ui.drawAnimatedCheckbox(ctx, ckX, ckY, 8, checkT, false);
+            }
 
-            ctx.method_25294(PAD, y + ITEM_H - 1, LEFT_W - PAD, y + ITEM_H, col(BORDER & 0xFFFFFF, 80));
+            ctx.method_25294(PAD, y + ITEM_H - 1, LEFT_W - PAD, y + ITEM_H, col(Ui.COL_BORDER & 0xFFFFFF, 80));
             y += ITEM_H;
         }
         ctx.method_44380();
@@ -1122,23 +1301,23 @@ public class TexturePickerScreen extends class_437 {
             int trkX = LEFT_W - 5, trkY = listTop + 4, trkH = listH - 8;
             int thumbH = Math.max(20, trkH * listH / totalH);
             int thumbY = trkY + (int)((double)(trkH - thumbH) * itemScroll / Math.max(1, totalH - listH));
-            ctx.method_25294(trkX, trkY, trkX + 3, trkY + trkH, col(BORDER & 0xFFFFFF, 100));
-            ctx.method_25294(trkX, thumbY, trkX + 3, thumbY + thumbH, col(ACCENT & 0xFFFFFF, 200));
+            ctx.method_25294(trkX, trkY, trkX + 3, trkY + trkH, col(Ui.COL_BORDER & 0xFFFFFF, 100));
+            ctx.method_25294(trkX, thumbY, trkX + 3, thumbY + thumbH, col(Ui.COL_ACCENT & 0xFFFFFF, 200));
             float phase = (float)(System.currentTimeMillis() % 2000L) / 2000f;
-            if (itemScroll > 1) Ui.scrollIndicator(ctx, LEFT_W / 2, listTop + 2, true, phase, ACCENT);
+            if (itemScroll > 1) Ui.scrollIndicator(ctx, LEFT_W / 2, listTop + 2, true, phase, Ui.COL_ACCENT);
             if (itemScroll < totalH - listH - 1)
-                Ui.scrollIndicator(ctx, LEFT_W / 2, bot - 10, false, phase, ACCENT);
+                Ui.scrollIndicator(ctx, LEFT_W / 2, bot - 10, false, phase, Ui.COL_ACCENT);
         }
     }
 
     private void drawConfigStrip(class_332 ctx, int mx, int my) {
         int top = configTop();
-        ctx.method_25294(LEFT_W, top, field_22789, top + CFG_H, PANEL);
-        ctx.method_25294(LEFT_W, top + CFG_H - 1, field_22789, top + CFG_H, BORDER);
+        ctx.method_25294(LEFT_W, top, field_22789, top + CFG_H, Ui.COL_PANEL);
+        ctx.method_25294(LEFT_W, top + CFG_H - 1, field_22789, top + CFG_H, Ui.COL_BORDER);
 
         SlotDef slot = SLOTS[selectedSlot];
         DrawHelper.drawText(ctx, field_22793, slot.emoji() + "  " + slot.display(),
-            LEFT_W + PAD, top + 6, TEXT, false);
+            LEFT_W + PAD, top + 6, Ui.COL_TEXT, false);
 
         if (slot.vanillaTexture()) {
             String hint = switch (slot.particleKind()) {
@@ -1149,31 +1328,98 @@ public class TexturePickerScreen extends class_437 {
                     ? "Pick any sword CIT texture — outputs textures/block/dead_tube_coral.png."
                     : "From textures/ folder in your packs.";
             };
-            DrawHelper.drawText(ctx, field_22793, hint, LEFT_W + PAD, top + 26, MUTED, false);
+            DrawHelper.drawText(ctx, field_22793, hint, LEFT_W + PAD, top + 26, Ui.COL_MUTED, false);
         } else {
             DrawHelper.drawText(ctx, field_22793, "CIT Name",
-                LEFT_W + PAD, top + 26, MUTED, false);
+                LEFT_W + PAD, top + 26, Ui.COL_MUTED, false);
+            drawCitNameBar(ctx);
             DrawHelper.drawText(ctx, field_22793, "Folder",
-                LEFT_W + PAD, top + 42, MUTED, false);
+                LEFT_W + PAD, top + 42, Ui.COL_MUTED, false);
             int btnX = LEFT_W + PAD + field_22793.method_1727("Folder ") + 6;
             int btnY = top + 38;
             for (TexFolder f : TexFolder.values()) {
                 boolean active = f == effectiveFolder(selectedSlot);
                 int bw = field_22793.method_1727(f.label) + 10;
                 ctx.method_25294(btnX, btnY, btnX + bw, btnY + 14,
-                    active ? col(ACCENT & 0xFFFFFF, 220) : col(SURFACE & 0xFFFFFF, 160));
+                    active ? col(Ui.COL_ACCENT & 0xFFFFFF, 220) : col(Ui.COL_SURFACE & 0xFFFFFF, 160));
                 DrawHelper.drawText(ctx, field_22793, f.label, btnX + 5, btnY + 3,
-                    active ? BG : MUTED, false);
+                    active ? Ui.COL_BG : Ui.COL_MUTED, false);
                 btnX += bw + 6;
             }
         }
     }
 
+    private int citLabelW() { return field_22793.method_1727("CIT Name  ") + 2; }
+
+    private void layoutCitBar() {
+        citBarX = LEFT_W + PAD + citLabelW();
+        citBarY = configTop() + 22;
+        citBarW = Math.min(220, field_22789 - citBarX - PAD);
+        citBarH = 14;
+    }
+
+    private void drawCitNameBar(class_332 ctx) {
+        if (nameDialogOpen || SLOTS[selectedSlot].vanillaTexture()) return;
+        layoutCitBar();
+        int sx = citBarX, sy = citBarY, sw = citBarW, sh = citBarH;
+        ctx.method_25294(sx, sy, sx + sw, sy + sh, col(Ui.COL_SURFACE & 0xFFFFFF, 200));
+        int lineCol = citNameFocused ? Ui.COL_ACCENT : Ui.COL_BORDER;
+        ctx.method_25294(sx, sy, sx + sw, sy + 1, lineCol);
+        ctx.method_25294(sx, sy + sh - 1, sx + sw, sy + sh, lineCol);
+        ctx.method_25294(sx, sy, sx + 1, sy + sh, lineCol);
+        ctx.method_25294(sx + sw - 1, sy, sx + sw, sy + sh, lineCol);
+        if (citNameFocused) {
+            ctx.method_25294(sx, sy + sh, sx + sw, sy + sh + 1, Ui.COL_ACCENT);
+        }
+
+        int textX = sx + 6, textY = sy + (sh - 8) / 2;
+        String display = citNameFocused ? citNameEdit : defaultNameForSlot(selectedSlot);
+        if (display.isEmpty() && !citNameFocused) {
+            DrawHelper.drawText(ctx, field_22793, "e.g. Pro Sword", textX, textY,
+                col(Ui.COL_MUTED & 0xFFFFFF, 140), false);
+        } else {
+            String shown = display;
+            if (citNameFocused && (System.currentTimeMillis() / 500) % 2 == 0) shown += "_";
+            DrawHelper.drawText(ctx, field_22793, shown, textX, textY, Ui.COL_TEXT, false);
+        }
+    }
+
+    private int searchLabelW() { return field_22793.method_1727("Search") + 8; }
+
+    private void layoutSearchBar() {
+        searchBarX = LEFT_W + PAD + searchLabelW();
+        searchBarY = configTop() + CFG_H + 4;
+        searchBarW = Math.max(120, field_22789 - searchBarX - PAD);
+        searchBarH = SEARCH_H - 6;
+    }
+
     private void drawSearchStrip(class_332 ctx) {
         int top = configTop() + CFG_H;
-        ctx.method_25294(LEFT_W, top, field_22789, top + SEARCH_H + 6, col(PANEL & 0xFFFFFF, 180));
-        ctx.method_25294(LEFT_W, top + SEARCH_H + 5, field_22789, top + SEARCH_H + 6, BORDER);
-        DrawHelper.drawText(ctx, field_22793, "Search", LEFT_W + PAD, top + 7, MUTED, false);
+        ctx.method_25294(LEFT_W, top, field_22789, top + SEARCH_H + 6, col(Ui.COL_PANEL & 0xFFFFFF, 180));
+        ctx.method_25294(LEFT_W, top + SEARCH_H + 5, field_22789, top + SEARCH_H + 6, Ui.COL_BORDER);
+        DrawHelper.drawText(ctx, field_22793, "Search", LEFT_W + PAD, top + 7, Ui.COL_MUTED, false);
+
+        layoutSearchBar();
+        int sx = searchBarX, sy = searchBarY, sw = searchBarW, sh = searchBarH;
+        ctx.method_25294(sx, sy, sx + sw, sy + sh, col(Ui.COL_SURFACE & 0xFFFFFF, 200));
+        int lineCol = searchFocused ? Ui.COL_ACCENT : Ui.COL_BORDER;
+        ctx.method_25294(sx, sy, sx + sw, sy + 1, lineCol);
+        ctx.method_25294(sx, sy + sh - 1, sx + sw, sy + sh, lineCol);
+        ctx.method_25294(sx, sy, sx + 1, sy + sh, lineCol);
+        ctx.method_25294(sx + sw - 1, sy, sx + sw, sy + sh, lineCol);
+        if (searchFocused) {
+            ctx.method_25294(sx, sy + sh, sx + sw, sy + sh + 1, Ui.COL_ACCENT);
+        }
+
+        int textX = sx + 6, textY = sy + (sh - 8) / 2;
+        if (searchQuery.isEmpty() && !searchFocused) {
+            DrawHelper.drawText(ctx, field_22793, "Search textures…", textX, textY,
+                col(Ui.COL_MUTED & 0xFFFFFF, 140), false);
+        } else {
+            String shown = searchQuery;
+            if (searchFocused && (System.currentTimeMillis() / 500) % 2 == 0) shown += "_";
+            DrawHelper.drawText(ctx, field_22793, shown, textX, textY, Ui.COL_TEXT, false);
+        }
     }
 
     private List<TextureOption> filteredOptions(int slotIdx) {
@@ -1183,34 +1429,17 @@ public class TexturePickerScreen extends class_437 {
         return all.stream().filter(o -> o.label().toLowerCase(Locale.ROOT).contains(q)).toList();
     }
 
-    private void updateSlotWidgets() {
-        SlotDef slot = SLOTS[selectedSlot];
-        if (nameField != null) {
-            int nfX = LEFT_W + PAD + field_22793.method_1727("CIT Name  ") + 2;
-            int nfW = Math.min(220, field_22789 - nfX - PAD);
-            if (nameDialogOpen || slot.vanillaTexture()) {
-                setTextFieldVisible(nameField, false);
-            } else {
-                positionTextField(nameField, nfX, configTop() + 24, nfW, 12);
-                setTextFieldVisible(nameField, true);
-                suppressNameListener = true;
-                nameField.method_1867(defaultNameForSlot(selectedSlot));
-                suppressNameListener = false;
-            }
-        }
-    }
-
     private void drawTexturePanel(class_332 ctx, int mx, int my, float delta) {
         int top = configTop() + CFG_H + SEARCH_H + 8;
         int bot = field_22790 - FOOTER, panX = LEFT_W;
-        ctx.method_25294(panX, top, field_22789, bot, BG);
+        ctx.method_25294(panX, top, field_22789, bot, Ui.COL_BG);
 
         if (scanning) {
             int cy = (top + bot) / 2;
             Ui.spinner(ctx, (field_22789 + LEFT_W) / 2, cy, 8,
-                (float)(System.currentTimeMillis() % 1200L) / 1200f, col(ACCENT & 0xFFFFFF, 200));
+                (float)(System.currentTimeMillis() % 1200L) / 1200f, col(Ui.COL_ACCENT & 0xFFFFFF, 200));
             DrawHelper.drawText(ctx, field_22793, scanStatus,
-                (field_22789 + LEFT_W) / 2 - field_22793.method_1727(scanStatus) / 2, cy + 14, MUTED, false);
+                (field_22789 + LEFT_W) / 2 - field_22793.method_1727(scanStatus) / 2, cy + 14, Ui.COL_MUTED, false);
             return;
         }
 
@@ -1224,12 +1453,16 @@ public class TexturePickerScreen extends class_437 {
                 : SLOTS[selectedSlot].vanillaTexture()
                 ? "Looks in assets/minecraft/textures/ in your packs."
                 : "Looks in optifine/cit/ in your packs.";
+            String tip = "Put packs in resourcepacks/ or slothyhub-local/, or join a server with a resource pack loaded.";
             int cy = (top + bot) / 2;
             DrawHelper.drawText(ctx, field_22793, msg,
-                (field_22789 + LEFT_W) / 2 - field_22793.method_1727(msg) / 2, cy - 5, MUTED, false);
+                (field_22789 + LEFT_W) / 2 - field_22793.method_1727(msg) / 2, cy - 12, Ui.COL_MUTED, false);
             DrawHelper.drawText(ctx, field_22793, hint,
-                (field_22789 + LEFT_W) / 2 - field_22793.method_1727(hint) / 2, cy + 8,
-                col(MUTED & 0xFFFFFF, 140), false);
+                (field_22789 + LEFT_W) / 2 - field_22793.method_1727(hint) / 2, cy + 2,
+                col(Ui.COL_MUTED & 0xFFFFFF, 140), false);
+            DrawHelper.drawText(ctx, field_22793, tip,
+                (field_22789 + LEFT_W) / 2 - field_22793.method_1727(tip) / 2, cy + 16,
+                col(Ui.COL_MUTED & 0xFFFFFF, 120), false);
             return;
         }
 
@@ -1237,17 +1470,18 @@ public class TexturePickerScreen extends class_437 {
             String msg = "No textures match \"" + searchQuery + "\"";
             int cy = (top + bot) / 2;
             DrawHelper.drawText(ctx, field_22793, msg,
-                (field_22789 + LEFT_W) / 2 - field_22793.method_1727(msg) / 2, cy, MUTED, false);
+                (field_22789 + LEFT_W) / 2 - field_22793.method_1727(msg) / 2, cy, Ui.COL_MUTED, false);
             return;
         }
 
         int TEX_H = 30, innerTop = top + 4;
+        DrawHelper.flushDraw(ctx);
         ctx.method_44379(panX, innerTop, field_22789, bot);
         int y = innerTop - (int) texScroll;
         int curSel = selections.getOrDefault(selectedSlot, -1);
 
         drawTexRow(ctx, panX, y, TEX_H, innerTop, bot, mx, my, curSel < 0,
-            "✕  None (no override)", curSel < 0, DANGER);
+            "✕  None (no override)", curSel < 0, Ui.COL_DANGER);
         y += TEX_H;
 
         for (int i = 0; i < opts.size(); i++) {
@@ -1256,25 +1490,43 @@ public class TexturePickerScreen extends class_437 {
             boolean sel = curSel == realIdx;
             boolean hov = mx >= panX && mx < field_22789 && my >= y && my < y + TEX_H && my > innerTop && my < bot;
             if (sel) {
-                ctx.method_25294(panX, y, field_22789, y + TEX_H, col(ACCENT & 0xFFFFFF, 28));
-                ctx.method_25294(panX, y, panX + 3, y + TEX_H, ACCENT);
+                ctx.method_25294(panX, y, field_22789, y + TEX_H, col(Ui.COL_ACCENT & 0xFFFFFF, 28));
+                ctx.method_25294(panX, y, panX + 3, y + TEX_H, Ui.COL_ACCENT);
             } else if (hov) {
-                ctx.method_25294(panX, y, field_22789, y + TEX_H, col(SURFACE & 0xFFFFFF, 80));
+                ctx.method_25294(panX, y, field_22789, y + TEX_H, col(Ui.COL_SURFACE & 0xFFFFFF, 80));
             }
             ensureTexThumb(opt);
             class_2960 tid = texThumbs.get(texThumbKey(opt));
-            if (tid != null)
-                DrawHelper.drawTexture(ctx, tid, panX + PAD, y + 3, 0f, 0f, 24, 24, 24, 24);
-            else if (opt.pngPreview() != null)
-                ctx.method_25294(panX + PAD, y + 7, panX + PAD + 16, y + 23, col(ACCENT & 0xFFFFFF, sel ? 255 : 120));
+            if (tid != null) {
+                int[] dim = texThumbSizes.get(texThumbKey(opt));
+                int texW = dim != null ? dim[0] : 24;
+                int texHImg = dim != null ? dim[1] : 24;
+                DrawHelper.drawTexture(ctx, tid, panX + PAD, y + 3, 0f, 0f, 24, 24, texW, texHImg);
+            } else if (opt.pngPreview() != null) {
+                ctx.method_25294(panX + PAD, y + 7, panX + PAD + 16, y + 23, col(Ui.COL_ACCENT & 0xFFFFFF, sel ? 255 : 120));
+            }
+            ctx.method_25294(panX + PAD, y + TEX_H - 1, field_22789 - PAD, y + TEX_H, col(Ui.COL_BORDER & 0xFFFFFF, 80));
+            y += TEX_H;
+        }
+
+        DrawHelper.flushDraw(ctx);
+        y = innerTop - (int) texScroll;
+        drawTexRowText(ctx, panX, y, TEX_H, innerTop, bot, mx, my, curSel < 0,
+            "✕  None (no override)", curSel < 0, Ui.COL_DANGER);
+        y += TEX_H;
+        for (int i = 0; i < opts.size(); i++) {
+            TextureOption opt = opts.get(i);
+            int realIdx = allOpts.indexOf(opt);
+            boolean sel = curSel == realIdx;
             String display = opt.label().length() > 64
                 ? "…" + opt.label().substring(opt.label().length() - 62) : opt.label();
             DrawHelper.drawText(ctx, field_22793, display, panX + PAD + 30, y + (TEX_H - 9) / 2,
-                sel ? ACCENT : TEXT, false);
-            ctx.method_25294(panX + PAD, y + TEX_H - 1, field_22789 - PAD, y + TEX_H, col(BORDER & 0xFFFFFF, 80));
+                sel ? Ui.COL_ACCENT : Ui.COL_TEXT, false);
             y += TEX_H;
         }
+        DrawHelper.flushDraw(ctx);
         ctx.method_44380();
+        DrawHelper.flushDraw(ctx);
 
         int listH = bot - innerTop;
         int totalH = (opts.size() + 1) * TEX_H;
@@ -1282,32 +1534,36 @@ public class TexturePickerScreen extends class_437 {
             int trkX = field_22789 - 6, trkY = innerTop + 4, trkH = listH - 8;
             int thumbH = Math.max(20, trkH * listH / totalH);
             int thumbY = trkY + (int)((double)(trkH - thumbH) * texScroll / Math.max(1, totalH - listH));
-            ctx.method_25294(trkX, trkY, trkX + 3, trkY + trkH, col(BORDER & 0xFFFFFF, 100));
-            ctx.method_25294(trkX, thumbY, trkX + 3, thumbY + thumbH, col(ACCENT & 0xFFFFFF, 200));
+            ctx.method_25294(trkX, trkY, trkX + 3, trkY + trkH, col(Ui.COL_BORDER & 0xFFFFFF, 100));
+            ctx.method_25294(trkX, thumbY, trkX + 3, thumbY + thumbH, col(Ui.COL_ACCENT & 0xFFFFFF, 200));
             float phase = (float)(System.currentTimeMillis() % 2000L) / 2000f;
-            if (texScroll > 1) Ui.scrollIndicator(ctx, panX + (field_22789 - panX) / 2, innerTop + 2, true, phase, ACCENT);
+            if (texScroll > 1) Ui.scrollIndicator(ctx, panX + (field_22789 - panX) / 2, innerTop + 2, true, phase, Ui.COL_ACCENT);
             if (texScroll < totalH - listH - 1)
-                Ui.scrollIndicator(ctx, panX + (field_22789 - panX) / 2, bot - 10, false, phase, ACCENT);
+                Ui.scrollIndicator(ctx, panX + (field_22789 - panX) / 2, bot - 10, false, phase, Ui.COL_ACCENT);
         }
     }
 
     private void drawTexRow(class_332 ctx, int panX, int y, int h, int innerTop, int bot,
                              int mx, int my, boolean hov, String text, boolean sel, int selCol) {
-        if (sel) ctx.method_25294(panX, y, field_22789, y + h, col(SURFACE & 0xFFFFFF, 140));
+        if (sel) ctx.method_25294(panX, y, field_22789, y + h, col(Ui.COL_SURFACE & 0xFFFFFF, 140));
         else if (hov && mx >= panX && my >= y && my < y + h && my > innerTop && my < bot)
-            ctx.method_25294(panX, y, field_22789, y + h, col(SURFACE & 0xFFFFFF, 60));
+            ctx.method_25294(panX, y, field_22789, y + h, col(Ui.COL_SURFACE & 0xFFFFFF, 60));
         if (sel) ctx.method_25294(panX, y, panX + 3, y + h, selCol);
-        DrawHelper.drawText(ctx, field_22793, text, panX + PAD, y + (h - 9) / 2, sel ? selCol : MUTED, false);
-        ctx.method_25294(panX + PAD, y + h - 1, field_22789 - PAD, y + h, col(BORDER & 0xFFFFFF, 80));
+        ctx.method_25294(panX + PAD, y + h - 1, field_22789 - PAD, y + h, col(Ui.COL_BORDER & 0xFFFFFF, 80));
+    }
+
+    private void drawTexRowText(class_332 ctx, int panX, int y, int h, int innerTop, int bot,
+                                int mx, int my, boolean hov, String text, boolean sel, int selCol) {
+        DrawHelper.drawText(ctx, field_22793, text, panX + PAD, y + (h - 9) / 2, sel ? selCol : Ui.COL_MUTED, false);
     }
 
     private void drawFooter(class_332 ctx) {
-        ctx.method_25294(0, field_22790 - FOOTER, field_22789, field_22790, PANEL);
-        ctx.method_25294(0, field_22790 - FOOTER, field_22789, field_22790 - FOOTER + 1, BORDER);
+        ctx.method_25294(0, field_22790 - FOOTER, field_22789, field_22790, Ui.COL_PANEL);
+        ctx.method_25294(0, field_22790 - FOOTER, field_22789, field_22790 - FOOTER + 1, Ui.COL_BORDER);
         if (buildStatus != null) {
             DrawHelper.drawText(ctx, field_22793, buildStatus,
                 field_22789 / 2 - field_22793.method_1727(buildStatus) / 2,
-                field_22790 - FOOTER + 8, buildOk ? ACCENT : DANGER, false);
+                field_22790 - FOOTER + 8, buildOk ? Ui.COL_ACCENT : Ui.COL_DANGER, false);
         }
     }
 
@@ -1336,44 +1592,46 @@ public class TexturePickerScreen extends class_437 {
         if (super.method_25402(mx, my, button)) return true;
         if (button != 0) return false;
 
-        // Back arrow only (narrow hitbox)
-        if (mx >= PAD && mx <= PAD + 12 && my >= 8 && my <= HEADER - 8) {
+        if (mx >= PAD && mx <= PAD + 18 && my >= 8 && my <= HEADER - 8) {
+            method_25419(); return true;
+        }
+        if (mx >= PAD + 18 && mx <= PAD + 32 && my >= 8 && my <= HEADER - 8) {
             method_25419(); return true;
         }
 
-        int top = HEADER + CATEGORY_H, bot = field_22790 - FOOTER;
-
-        if (mx < LEFT_W && my >= HEADER && my < HEADER + CATEGORY_H) {
-            int tabX = PAD;
-            for (SlotCategory c : SlotCategory.values()) {
-                String label = categoryLabel(c);
-                int w = field_22793.method_1727(label) + 14;
-                if (mx >= tabX && mx <= tabX + w) {
-                    activeCategory = c;
-                    itemScroll = itemScrollTarget = 0;
-                    List<Integer> vis = visibleSlotIndices();
-                    if (!vis.isEmpty() && SLOTS[selectedSlot].category() != c) {
-                        saveNameFieldForSlot(selectedSlot);
-                        selectedSlot = vis.get(0);
-                    }
-                    updateSlotWidgets();
-                    return true;
-                }
-                tabX += w + 10;
-            }
+        layoutSearchBar();
+        layoutCitBar();
+        if (!SLOTS[selectedSlot].vanillaTexture() && !nameDialogOpen
+            && mx >= citBarX && mx <= citBarX + citBarW
+            && my >= citBarY && my <= citBarY + citBarH) {
+            citNameEdit = defaultNameForSlot(selectedSlot);
+            citNameFocused = true;
+            searchFocused = false;
+            return true;
         }
+        if (mx >= searchBarX && mx <= searchBarX + searchBarW
+            && my >= searchBarY && my <= searchBarY + searchBarH) {
+            commitCitNameEdit(selectedSlot);
+            searchFocused = true;
+            return true;
+        }
+        if (citNameFocused) commitCitNameEdit(selectedSlot);
+        searchFocused = false;
+
+        if (handleCategoryTabClick(mx, my)) return true;
+
+        int top = HEADER + CATEGORY_H, bot = field_22790 - FOOTER;
 
         // Slot list
         if (mx < LEFT_W && my > top + 18 && my < bot) {
             int y = top + 18 - (int) itemScroll;
             for (int i : visibleSlotIndices()) {
                 if (my >= y && my < y + ITEM_H) {
-                    if (i != selectedSlot) saveNameFieldForSlot(selectedSlot);
+                    if (i != selectedSlot) commitCitNameEdit(selectedSlot);
                     selectedSlot = i;
                     texScroll = texScrollTarget = 0;
                     searchQuery = "";
-                    if (searchField != null) searchField.method_1867("");
-                    updateSlotWidgets();
+                    searchFocused = false;
                     return true;
                 }
                 y += ITEM_H;
@@ -1448,6 +1706,15 @@ public class TexturePickerScreen extends class_437 {
                 packNameDraft += chr;
             return true;
         }
+        if (citNameFocused && chr >= 32 && chr != 127 && citNameEdit.length() < 40) {
+            citNameEdit += chr;
+            return true;
+        }
+        if (searchFocused && chr >= 32 && chr != 127 && searchQuery.length() < 60) {
+            searchQuery += chr;
+            texScroll = texScrollTarget = 0;
+            return true;
+        }
         return super.method_25400(chr, modifiers);
     }
 
@@ -1461,6 +1728,33 @@ public class TexturePickerScreen extends class_437 {
                 return true;
             }
             return true;
+        }
+        if (citNameFocused) {
+            if (key == 259 && !citNameEdit.isEmpty()) {
+                citNameEdit = citNameEdit.substring(0, citNameEdit.length() - 1);
+                return true;
+            }
+            if (key == 256 || key == 257) {
+                commitCitNameEdit(selectedSlot);
+                return true;
+            }
+        }
+        if (searchFocused) {
+            if (key == 259 && !searchQuery.isEmpty()) {
+                searchQuery = searchQuery.substring(0, searchQuery.length() - 1);
+                texScroll = texScrollTarget = 0;
+                return true;
+            }
+            if (key == 256) {
+                searchQuery = "";
+                searchFocused = false;
+                texScroll = texScrollTarget = 0;
+                return true;
+            }
+            if (key == 257) {
+                searchFocused = false;
+                return true;
+            }
         }
         if (key == 256) { method_25419(); return true; }
         return super.method_25404(key, scan, mods);

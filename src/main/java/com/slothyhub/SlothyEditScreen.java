@@ -19,13 +19,6 @@ public class SlothyEditScreen extends class_437 {
     private String statusMsg = null;
     private long statusAt = 0;
 
-    private static final int COL_BG     = Ui.COL_BG;
-    private static final int COL_PANEL  = Ui.COL_PANEL;
-    private static final int COL_TEXT   = Ui.COL_TEXT;
-    private static final int COL_MUTED  = Ui.COL_MUTED;
-    private static final int COL_BORDER = Ui.COL_BORDER;
-    private static final int COL_ACCENT = Ui.COL_ACCENT;
-
     public SlothyEditScreen(class_437 parent, String packId, String folderName, String currentName) {
         super(class_2561.method_43470("Edit Pack"));
         this.parent = parent;
@@ -40,7 +33,7 @@ public class SlothyEditScreen extends class_437 {
             class_2561.method_43470("Pack name"));
         nameField.method_1880(80);
         nameField.method_1858(false);
-        nameField.method_1868(COL_TEXT);
+        nameField.method_1868(Ui.COL_TEXT);
         nameField.method_47404(class_2561.method_43470("Pack display name..."));
         nameField.method_1852(current != null ? current : "");
         method_37063(nameField);
@@ -48,27 +41,24 @@ public class SlothyEditScreen extends class_437 {
 
     @Override
     public void method_25394(class_332 ctx, int mx, int my, float delta) {
-        ctx.method_25294(0, 0, field_22789, field_22790, COL_BG);
-        ctx.method_25294(0, 0, field_22789, 40, COL_PANEL);
-        ctx.method_25294(0, 40, field_22789, 41, COL_BORDER);
-        ctx.method_25294(0, 0, field_22789, 2, COL_ACCENT);
-        DrawHelper.drawText(ctx, field_22793, "EDIT PACK  //  SLOTHYHUB", 18, 14, COL_TEXT, false);
+        ctx.method_25294(0, 0, field_22789, field_22790, Ui.COL_BG);
+        Ui.drawSubscreenHeader(ctx, field_22793, field_22789, "EDIT PACK  //  SLOTHYHUB", delta);
 
-        ctx.method_25294(18, 52, field_22789 - 18, 53, COL_BORDER);
-        DrawHelper.drawText(ctx, field_22793, "PACK ID: " + packId.toUpperCase(), 18, 56, COL_MUTED, false);
-        DrawHelper.drawText(ctx, field_22793, "Display Name", 18, 78, COL_TEXT, false);
-        DrawHelper.drawText(ctx, field_22793, "Shown in-game and on the hub screen.", 18, 88, COL_MUTED, false);
+        ctx.method_25294(18, 52, field_22789 - 18, 53, Ui.COL_BORDER);
+        DrawHelper.drawText(ctx, field_22793, "PACK ID: " + packId.toUpperCase(), 18, 56, Ui.COL_MUTED, false);
+        DrawHelper.drawText(ctx, field_22793, "Display Name", 18, 78, Ui.COL_TEXT, false);
+        DrawHelper.drawText(ctx, field_22793, "Shown in-game and on the hub screen.", 18, 88, Ui.COL_MUTED, false);
         for (net.minecraft.class_364 child : method_25396()) {
             if (child instanceof net.minecraft.class_4068 d) d.method_25394(ctx, mx, my, delta);
         }
 
         if (statusMsg != null && System.currentTimeMillis() - statusAt < 3000L) {
-            DrawHelper.drawText(ctx, field_22793, statusMsg, field_22789 / 2 - field_22793.method_1727(statusMsg) / 2, 126, COL_ACCENT, false);
+            DrawHelper.drawText(ctx, field_22793, statusMsg, field_22789 / 2 - field_22793.method_1727(statusMsg) / 2, 126, Ui.COL_ACCENT, false);
         }
 
         // Footer
-        ctx.method_25294(0, field_22790 - 36, field_22789, field_22790 - 35, COL_BORDER);
-        ctx.method_25294(0, field_22790 - 35, field_22789, field_22790, COL_PANEL);
+        ctx.method_25294(0, field_22790 - 36, field_22789, field_22790 - 35, Ui.COL_BORDER);
+        ctx.method_25294(0, field_22790 - 35, field_22789, field_22790, Ui.COL_PANEL);
         boolean saveHov = mx >= field_22789 / 2 - 56 && mx <= field_22789 / 2 + 56 && my >= field_22790 - 27 && my <= field_22790 - 7;
         drawBtn(ctx, field_22789 / 2 - 56, field_22790 - 27, 112, 20, "SAVE", saveHov);
         boolean closeHov = mx >= field_22789 / 2 + 64 && mx <= field_22789 / 2 + 116 && my >= field_22790 - 27 && my <= field_22790 - 7;
@@ -76,7 +66,7 @@ public class SlothyEditScreen extends class_437 {
     }
 
     private void drawBtn(class_332 ctx, int x, int y, int w, int h, String label, boolean hov) {
-        int border = hov ? COL_ACCENT : COL_BORDER, fill = hov ? COL_ACCENT : COL_BG, fg = hov ? -16777216 : COL_MUTED;
+        int border = hov ? Ui.COL_ACCENT : Ui.COL_BORDER, fill = hov ? Ui.COL_ACCENT : Ui.COL_BG, fg = hov ? -16777216 : Ui.COL_MUTED;
         ctx.method_25294(x, y, x + w, y + h, fill);
         ctx.method_25294(x, y, x + w, y + 1, border); ctx.method_25294(x, y + h - 1, x + w, y + h, border);
         ctx.method_25294(x, y, x + 1, y + h, border); ctx.method_25294(x + w - 1, y, x + w, y + h, border);
