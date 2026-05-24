@@ -967,7 +967,12 @@ public abstract class SlothyHubScreenBase extends class_437 {
                 String msg = e.getMessage();
                 if (msg == null || msg.isBlank()) msg = e.getClass().getSimpleName();
                 String fm = msg;
-                class_310.method_1551().execute(() -> { error = fm; loading = false; });
+                class_310.method_1551().execute(() -> {
+                    error = fm;
+                    loading = false;
+                    localPacks = LocalPackManager.getLocalPacks();
+                    allPacks = new ArrayList<>(localPacks);
+                });
             }
         });
     }

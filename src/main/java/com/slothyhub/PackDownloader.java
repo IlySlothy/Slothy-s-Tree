@@ -18,6 +18,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
@@ -93,7 +94,7 @@ public class PackDownloader {
             Path stagingDir = resourcePacksDir.resolve(".slothyhub-staging");
             Files.createDirectories(stagingDir);
             Path archiveTmp = stagingDir.resolve(safeBase + "-" + System.currentTimeMillis() + ext);
-            String downloadUrl = pack.getDirectDownloadUrl(serverUrl);
+            String downloadUrl = resolveDownloadUrl(pack, serverUrl);
             SlothyHubMod.LOGGER.info("Downloading pack from {}", downloadUrl);
             HttpURLConnection conn = openWithRedirects(downloadUrl, 5);
             int status = conn.getResponseCode();
@@ -224,6 +225,16 @@ public class PackDownloader {
                 else Files.copy(p, target, StandardCopyOption.REPLACE_EXISTING);
             }
         }
+    }
+
+    /** GitHub Releases and other static hosts put the direct URL in pack_url. */
+    private static String resolveDownloadUrl(Pack pack, String serverUrl) {
+        String direct = pack.getPackUrl();
+        if (direct != null && !direct.isBlank()) {
+            String lower = direct.toLowerCase(Locale.ROOT);
+            if (lower.startsWith("http://") || lower.startsWith("https://")) return direct.trim();
+        }
+        return pack.getDirectDownloadUrl(serverUrl);
     }
 
     private static ArchiveKind sniffArchiveKind(Path file, boolean hintZip) throws IOException {

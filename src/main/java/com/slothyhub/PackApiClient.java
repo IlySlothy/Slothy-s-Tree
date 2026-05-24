@@ -21,7 +21,18 @@ public class PackApiClient {
     private static final int TIMEOUT_MS = 10000;
 
     public static List<Pack> fetchPacks(String serverUrl) throws IOException {
-        String endpoint = serverUrl + "/api/packs";
+        IOException last = null;
+        for (String path : new String[]{"/api/packs.json", "/api/packs"}) {
+            try {
+                return fetchPacksFrom(serverUrl + path);
+            } catch (IOException e) {
+                last = e;
+            }
+        }
+        throw last != null ? last : new IOException("Could not load pack catalog from " + serverUrl);
+    }
+
+    private static List<Pack> fetchPacksFrom(String endpoint) throws IOException {
         try {
             HttpURLConnection conn = (HttpURLConnection) URI.create(endpoint).toURL().openConnection();
             conn.setConnectTimeout(TIMEOUT_MS);

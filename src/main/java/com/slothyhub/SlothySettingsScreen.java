@@ -52,7 +52,7 @@ public class SlothySettingsScreen extends class_437 {
         serverUrlField.method_1858(false);
         serverUrlField.method_1868(COL_TEXT);
         serverUrlField.method_1852(url != null ? url : "");
-        serverUrlField.method_47404(class_2561.method_43470("https://example.com/api"));
+        serverUrlField.method_47404(class_2561.method_43470(SlothyConfig.DEFAULT_SERVER_URL));
         method_37063(serverUrlField);
     }
 

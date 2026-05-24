@@ -11,6 +11,9 @@ import net.fabricmc.loader.api.FabricLoader;
 
 public class SlothyConfig {
 
+    /** Free GitHub Pages catalog — change in settings when you move to a paid domain. */
+    public static final String DEFAULT_SERVER_URL = "https://ilyslothy.github.io/Slothy-s-Tree";
+
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("slothyhub.json");
 
@@ -106,12 +109,13 @@ public class SlothyConfig {
         save();
     }
 
-    /**
-     * Auto-discovery is disabled — set a server URL manually in the settings screen
-     * if you want to fetch remote packs.
-     */
+    /** Uses the default GitHub Pages catalog when no server URL is configured yet. */
     public static void tryAutoDiscover() {
-        // No-op: remote rendezvous disabled. Configure server URL in settings if needed.
+        if (getServerUrl().isBlank()) {
+            serverUrl = DEFAULT_SERVER_URL;
+            save();
+            SlothyHubMod.LOGGER.info("SlothyHub: using default pack catalog at {}", DEFAULT_SERVER_URL);
+        }
     }
 
     public static void load() {

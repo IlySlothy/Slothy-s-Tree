@@ -1,0 +1,50 @@
+[
+  {
+    "id": "summer",
+    "name": "Summer",
+    "pack_filename": "Summer.zip",
+    "author_name": "ilyslothy",
+    "author_id": "ilyslothy",
+    "showcase_path": "",
+    "pack_url": "https://github.com/IlySlothy/Slothy-s-Tree/releases/download/packs-v1/Summer.zip",
+    "tags": ["pvp", "cit", "swords", "armor"],
+    "is_zip": true,
+    "has_local_file": false,
+    "star_count": 0,
+    "downloads": 0,
+    "sha256": "",
+    "viewer_starred": false
+  },
+  {
+    "id": "fallen-snow",
+    "name": "Fallen Snow",
+    "pack_filename": "FallenSnow.zip",
+    "author_name": "ilyslothy",
+    "author_id": "ilyslothy",
+    "showcase_path": "",
+    "pack_url": "https://github.com/IlySlothy/Slothy-s-Tree/releases/download/packs-v1/FallenSnow.zip",
+    "tags": ["pvp", "cit", "winter"],
+    "is_zip": true,
+    "has_local_file": false,
+    "star_count": 0,
+    "downloads": 0,
+    "sha256": "",
+    "viewer_starred": false
+  },
+  {
+    "id": "fortnite-pack",
+    "name": "Fortnite Pack",
+    "pack_filename": "Fortnite_Pack_Ilyslothy.zip",
+    "author_name": "ilyslothy",
+    "author_id": "ilyslothy",
+    "showcase_path": "",
+    "pack_url": "https://github.com/IlySlothy/Slothy-s-Tree/releases/download/packs-v1/Fortnite_Pack_Ilyslothy.zip",
+    "tags": ["pvp"],
+    "is_zip": true,
+    "has_local_file": false,
+    "star_count": 0,
+    "downloads": 0,
+    "sha256": "",
+    "viewer_starred": false
+  }
+]
