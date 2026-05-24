@@ -12,11 +12,23 @@ The mod fetches: `https://ilyslothy.github.io/Slothy-s-Tree/api/packs.json`
 ## One-time setup (GitHub repo settings)
 
 1. Open **Settings → Pages**
-2. Under **Build and deployment**, set **Source** to **GitHub Actions**
-3. Push to `main` — the `Deploy GitHub Pages` workflow publishes the `docs/` folder
+2. Under **Build and deployment → Source**, choose **GitHub Actions**  
+   (Do **not** use "Deploy from a branch" or Jekyll — we use the static `docs/` folder.)
+3. Go to **Actions** tab → run **Deploy static content to Pages** (or push to `main`)
+4. Wait for the green checkmark (~1 minute)
 
 Your site will be live at:  
-`https://ilyslothy.github.io/Slothy-s-Tree/`
+**https://ilyslothy.github.io/Slothy-s-Tree/**
+
+Test the catalog:  
+**https://ilyslothy.github.io/Slothy-s-Tree/api/packs.json**
+
+If you still see **404**:
+- Confirm **Settings → Pages → Source** is **GitHub Actions**
+- Open **Actions** and check the latest **Deploy static content to Pages** run for errors
+- First deploy may ask you to approve the `github-pages` environment — click **Approve**
+
+The mod default server URL is already set to `https://ilyslothy.github.io/Slothy-s-Tree`.
 
 ---
 
