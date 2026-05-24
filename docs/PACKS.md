@@ -41,11 +41,19 @@ The mod default server URL is already set to `https://ilyslothy.github.io/Slothy
 3. Attach the `.zip` files (Summer.zip, FallenSnow.zip, etc.)
 4. Publish the release
 
-Direct download URL format:
+Direct download URL format (GitHub Releases):
 
 ```
 https://github.com/IlySlothy/Slothy-s-Tree/releases/download/packs-v1/YourPack.zip
 ```
+
+Or host zips on GitHub Pages under `docs/downloads/` (good for packs under ~50 MB each):
+
+```
+https://ilyslothy.github.io/Slothy-s-Tree/downloads/YourPack.zip
+```
+
+Set **`pack_url`** in `docs/api/packs.json` to whichever URL you use.
 
 ### 2. Add an entry to `docs/api/packs.json`
 
