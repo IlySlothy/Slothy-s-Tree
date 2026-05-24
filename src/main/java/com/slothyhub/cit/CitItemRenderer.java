@@ -42,6 +42,8 @@ public final class CitItemRenderer {
     /** 1.21.8+: pre-baked quad list on layer (field_56964). */
     private static final Field LAYER_QUAD_LIST = McVersion.atLeast("1.21.8")
         ? resolveLayerField("field_56964") : null;
+    private static final Method SET_LAYER_SPRITE = McVersion.atLeast("1.21.8")
+        ? resolveLayerMethod("method_67994", class_1058.class) : null;
     private static final boolean USES_QUAD_LAYERS = LAYER_QUAD_LIST != null;
     private static final Set<String> NO_MATCH_LOGGED = ConcurrentHashMap.newKeySet();
 
@@ -133,6 +135,10 @@ public final class CitItemRenderer {
         if (!CitVirtualTextures.isAtlasSprite(sprite)) return;
 
         if (USES_QUAD_LAYERS) {
+            // 1.21.8 path — unchanged from when CIT was working
+            if (SET_LAYER_SPRITE != null) {
+                try { SET_LAYER_SPRITE.invoke(layer, sprite); } catch (Exception ignored) {}
+            }
             prepareQuadLayer(layer, sprite);
             return;
         }
@@ -164,7 +170,10 @@ public final class CitItemRenderer {
                 class_10444.class_10446 layer = layers[i];
                 if (layer == null || !isNormalRenderPass(layer)) continue;
                 ((CitLayerAccess) (Object) layer).slothyhub$setCitSprite(sprite);
-                applyCitToLayer(layer, sprite);
+                // 1.21.4 only — bake-time wrap; 1.21.8 applies quads at draw prep (already worked)
+                if (!USES_QUAD_LAYERS) {
+                    wrapLayerModel114(layer, sprite);
+                }
             }
         } catch (Exception e) {
             SlothyHubMod.LOGGER.debug("CIT: assign layer sprites failed: {}", e.getMessage());
@@ -193,15 +202,6 @@ public final class CitItemRenderer {
                 LAYER_BAKED_MODEL.set(layer, CitLegacyItemRenderer.unwrap(current));
             }
         } catch (Exception ignored) {}
-    }
-
-    private static void applyCitToLayer(class_10444.class_10446 layer, class_1058 sprite) {
-        if (layer == null || sprite == null) return;
-        if (USES_QUAD_LAYERS) {
-            prepareQuadLayer(layer, sprite);
-        } else {
-            wrapLayerModel114(layer, sprite);
-        }
     }
 
     /** 1.21.4–1.21.7: wrap the layer baked model so getQuads() returns CIT sprite UVs. */
@@ -374,6 +374,15 @@ public final class CitItemRenderer {
         return null;
     }
 
+
+    private static Method resolveLayerMethod(String name, Class<?>... params) {
+        try {
+            Method m = class_10444.class_10446.class.getMethod(name, params);
+            m.setAccessible(true);
+            return m;
+        } catch (Exception ignored) {}
+        return null;
+    }
 
     private static Object resolveNormalRenderPass() {
         try {
