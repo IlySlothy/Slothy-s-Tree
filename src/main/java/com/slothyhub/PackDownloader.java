@@ -53,37 +53,35 @@ public class PackDownloader {
         class_310 mc = class_310.method_1551();
         Path resourcePacksDir = mc.field_1697.toPath().resolve("resourcepacks");
         Files.createDirectories(resourcePacksDir);
-        String safeBase = packName.replaceAll("[^a-zA-Z0-9_\\-. ]", "_").trim();
-        if (safeBase.isEmpty()) safeBase = "CustomPack";
-        Path extractTarget = resourcePacksDir.resolve(safeBase);
-        if (Files.exists(extractTarget)) deleteRecursive(extractTarget);
-        Files.createDirectories(extractTarget);
-        Path tmp = resourcePacksDir.resolve(".slothyhub-staging");
-        Files.createDirectories(tmp);
-        Path tmpZip = tmp.resolve(safeBase + "-" + System.currentTimeMillis() + ".zip");
-        try {
-            Files.write(tmpZip, zipData);
-            extractZip(tmpZip, extractTarget);
-        } finally {
-            try { Files.deleteIfExists(tmpZip); } catch (IOException ignored) {}
-        }
-        flattenSingleRoot(extractTarget);
-        String folderName = extractTarget.getFileName().toString();
-        String builderId = "builder-" + folderName;
+        String safeBase = BuiltPackLibrary.sanitizeName(packName);
+        String zipName = safeBase + ".zip";
+        Path zipPath = resourcePacksDir.resolve(zipName);
+        Files.write(zipPath, zipData);
+        PackMetaUtil.repairZip(zipPath);
+        BuiltPackLibrary.savePack(safeBase, packName, Files.readAllBytes(zipPath));
+
+        final String builderId = "library:" + safeBase;
         mc.execute(() -> {
             try {
-                applyResourcePack(mc, folderName);
-                addToMarker(mc, builderId, folderName);
-                SlothyHubMod.LOGGER.info("Builder pack '{}' applied and activated", folderName);
+                applyResourcePack(mc, zipName);
+                addToMarker(mc, builderId, zipName);
+                SlothyHubMod.LOGGER.info("Builder pack '{}' applied from {}", packName, zipName);
             } catch (Exception e) {
-                SlothyHubMod.LOGGER.error("Failed to apply builder pack '{}'", folderName, e);
+                SlothyHubMod.LOGGER.error("Failed to apply builder pack '{}'", packName, e);
             }
         });
-        return folderName;
+        return zipName;
     }
 
     public static void downloadAndApply(Pack pack, String serverUrl, ProgressCallback cb) {
-        if (pack.isLocal()) { applyLocalPack(pack, cb); return; }
+        if (pack.isLocal() || pack.hasLocalFile()) {
+            Path installed = findInstalledArchive(pack);
+            if (installed != null) {
+                applyLocalArchive(pack, installed, cb);
+                return;
+            }
+            if (pack.isLocal()) { applyLocalPack(pack, cb); return; }
+        }
         class_310 mc = class_310.method_1551();
         Path resourcePacksDir = mc.field_1697.toPath().resolve("resourcepacks");
         try {
@@ -139,6 +137,7 @@ public class PackDownloader {
                 try { Files.deleteIfExists(archiveTmp); } catch (IOException ignored) {}
             }
             flattenSingleRoot(extractTarget);
+            PackMetaUtil.repairFolder(extractTarget);
             String safeName = extractTarget.getFileName().toString();
             mc.execute(() -> {
                 try {
@@ -160,18 +159,39 @@ public class PackDownloader {
     }
 
     private static void applyLocalPack(Pack pack, ProgressCallback cb) {
+        Path source = findInstalledArchive(pack);
+        if (source == null) {
+            class_310.method_1551().execute(() ->
+                cb.onError("Local pack file not found: " + pack.getPackFilename()));
+            return;
+        }
+        applyLocalArchive(pack, source, cb);
+    }
+
+    private static Path findInstalledArchive(Pack pack) {
+        class_310 mc = class_310.method_1551();
+        Path rp = mc.field_1697.toPath().resolve("resourcepacks");
+        String fn = pack.getPackFilename();
+        if (fn != null && !fn.isBlank()) {
+            Path direct = rp.resolve(fn);
+            if (Files.isRegularFile(direct)) return direct;
+            Path inLocal = com.slothyhub.local.LocalPackManager.getLocalPackDir().resolve(fn);
+            if (Files.isRegularFile(inLocal)) return inLocal;
+        }
+        String packUrl = pack.getPackUrl();
+        if (packUrl != null && packUrl.startsWith("file:")) {
+            try {
+                Path p = java.nio.file.Paths.get(URI.create(packUrl));
+                if (Files.exists(p)) return p;
+            } catch (Exception ignored) {}
+        }
+        return null;
+    }
+
+    private static void applyLocalArchive(Pack pack, Path sourcePath, ProgressCallback cb) {
         class_310 mc = class_310.method_1551();
         Path resourcePacksDir = mc.field_1697.toPath().resolve("resourcepacks");
         try {
-            // Resolve source: pack_url is stored as a file:// URI
-            Path sourcePath;
-            String packUrl = pack.getPackUrl();
-            if (packUrl != null && packUrl.startsWith("file:")) {
-                sourcePath = java.nio.file.Paths.get(URI.create(packUrl));
-            } else {
-                sourcePath = com.slothyhub.local.LocalPackManager.getLocalPackDir()
-                    .resolve(pack.getPackFilename());
-            }
             if (!Files.exists(sourcePath)) {
                 mc.execute(() -> cb.onError("Local pack file not found: " + pack.getPackFilename()));
                 return;
@@ -197,6 +217,7 @@ public class PackDownloader {
                 }
                 flattenSingleRoot(extractTarget);
             }
+            PackMetaUtil.repairFolder(extractTarget);
 
             String safeName = extractTarget.getFileName().toString();
             mc.execute(() -> {

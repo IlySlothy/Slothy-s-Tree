@@ -8,8 +8,10 @@ import net.minecraft.class_3300;
 
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Fabric resource reload listener — re-parses CIT rules whenever resource packs change.
@@ -24,9 +26,6 @@ import java.util.Map;
 public final class CitResourceReloadListener implements SimpleSynchronousResourceReloadListener {
 
     private static final class_2960 ID = class_2960.method_60655("slothyhub", "cit_listener");
-
-    /** Namespaces to scan — most packs use "minecraft", some use their own. */
-    private static final String[] NAMESPACES = { "minecraft", "optifine", "citresewn" };
 
     /** Path prefixes within a namespace that contain CIT .properties files. */
     private static final String[] CIT_PATH_PREFIXES = {
@@ -46,12 +45,20 @@ public final class CitResourceReloadListener implements SimpleSynchronousResourc
         List<CitRule> rules = new ArrayList<>();
         int scanned = 0;
 
-        for (String namespace : NAMESPACES) {
+        Set<String> namespaces = new LinkedHashSet<>();
+        namespaces.add("minecraft");
+        namespaces.add("optifine");
+        namespaces.add("citresewn");
+        try {
+            namespaces.addAll(manager.method_14487());
+        } catch (Exception ignored) {}
+
+        for (String namespace : namespaces) {
             try {
                 // findResources(namespace, pathPredicate) -> Map<Identifier, Resource>
                 // First arg = namespace ("minecraft"), second = predicate on the full identifier
                 Map<class_2960, ?> found = manager.method_14488(namespace, id -> {
-                    String path = id.method_12836(); // Identifier#getPath()
+                    String path = id.method_12832(); // Identifier#getPath() — not getNamespace()
                     if (!path.endsWith(".properties")) return false;
                     for (String prefix : CIT_PATH_PREFIXES) {
                         if (path.startsWith(prefix)) return true;
@@ -66,7 +73,7 @@ public final class CitResourceReloadListener implements SimpleSynchronousResourc
                         InputStream in = openResource(entry.getValue());
                         if (in != null) {
                             try (in) {
-                                CitRule rule = CitRuleParser.parse(rid.toString(), in);
+                                CitRule rule = CitRuleParser.parse(rid, in);
                                 if (rule != null) rules.add(rule);
                             }
                         }
@@ -81,6 +88,11 @@ public final class CitResourceReloadListener implements SimpleSynchronousResourc
 
         CitRuleSet.setActive(new CitRuleSet(rules));
         SlothyHubMod.LOGGER.info("CIT: scanned {} properties files, loaded {} rules.", scanned, rules.size());
+        for (CitRule r : rules) {
+            SlothyHubMod.LOGGER.info("CIT: rule {} items={} name='{}' texture={}",
+                r.id, r.items, r.nameMatcher, r.texture);
+        }
+        CitVirtualTextures.rebuild(manager, CitRuleSet.active());
     }
 
     /** Opens a Resource's InputStream via reflection (API varies slightly across MC versions). */

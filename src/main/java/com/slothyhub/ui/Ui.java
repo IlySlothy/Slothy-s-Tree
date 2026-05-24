@@ -9,6 +9,7 @@ import java.util.Iterator;
 import java.util.List;
 import net.minecraft.class_1109;
 import net.minecraft.class_1113;
+import net.minecraft.class_2960;
 import net.minecraft.class_310;
 import net.minecraft.class_332;
 import net.minecraft.class_3414;
@@ -184,6 +185,10 @@ public final class Ui {
 
     // ── Kill effects ───────────────────────────────────────────────────────
 
+    private static float totemPopAlpha = 0f;
+    private static float totemPopScale = 0.6f;
+    private static float totemPopRotation = 0f;
+
     public static void onKill() {
         String effect = SlothyConfig.getKillEffect();
         if ("none".equals(effect)) return;
@@ -191,10 +196,35 @@ public final class Ui {
         float cy = 0.38f + (float)(Math.random() * 0.06f);
         killParticles.add(new float[]{cx, cy, -40f, 1f, 0f, 1.2f});
         killVignetteAlpha = 1f;
-        if ("totem".equals(effect))    playTotemKill();
-        else if ("anvil".equals(effect))   playAnvilKill();
+        if ("totem".equals(effect)) {
+            totemPopAlpha = 1f;
+            totemPopScale = 0.6f;
+            totemPopRotation = 0f;
+            playTotemKill();
+        } else if ("anvil".equals(effect))   playAnvilKill();
         else if ("thunder".equals(effect)) playThunderKill();
         else playKill();
+    }
+
+    /** Totem-of-undying style pop overlay on kill. */
+    public static void renderTotemPop(class_332 ctx, int screenW, int screenH, float delta) {
+        if (totemPopAlpha <= 0f || !"totem".equals(SlothyConfig.getKillEffect())) return;
+        totemPopAlpha = Math.max(0f, totemPopAlpha - delta * 0.55f);
+        totemPopScale = Math.min(1.4f, totemPopScale + delta * 1.8f);
+        totemPopRotation += delta * 6f;
+        int alpha = (int)(totemPopAlpha * 255f);
+        if (alpha < 8) return;
+        int size = (int)(72 * totemPopScale);
+        int cx = screenW / 2, cy = screenH / 2 - 20;
+        class_2960 totem = class_2960.method_60655("minecraft", "item/totem_of_undying");
+        DrawHelper.pushMatrices(ctx);
+        DrawHelper.translateMatrices(ctx, cx, cy, 0);
+        DrawHelper.scaleMatrices(ctx, totemPopScale, totemPopScale, 1f);
+        DrawHelper.drawTexture(ctx, totem, -size / 2, -size / 2, 0f, 0f, size, size, size, size);
+        DrawHelper.popMatrices(ctx);
+        class_310 mc = class_310.method_1551();
+        DrawHelper.drawText(ctx, mc.field_1772, "TOTEM POP", cx - mc.field_1772.method_1727("TOTEM POP") / 2,
+            cy + size / 2 + 8, alpha << 24 | (COL_GOLD & 0xFFFFFF), true);
     }
 
     public static void renderKillEffect(class_332 ctx, int screenW, int screenH, float delta) {
@@ -388,5 +418,38 @@ public final class Ui {
 
     public static int getFloatOffset(float phase, float amplitude) {
         return (int)(Math.sin(phase * Math.PI * 2) * amplitude);
+    }
+
+    /** Small sloth face badge for headers. */
+    public static void drawSlothBadge(class_332 ctx, net.minecraft.class_327 font, int x, int y, float phase) {
+        int bob = getFloatOffset(phase, 1.5f);
+        int cy = y + bob;
+        ctx.method_25294(x, cy + 1, x + 14, cy + 13, withAlpha(COL_ACCENT & 0xFFFFFF, 25));
+        DrawHelper.drawText(ctx, font, "\uD83E\uDD8A", x, cy, COL_ACCENT, false);
+    }
+
+    /** Paw print decoration. */
+    public static void drawPawPrint(class_332 ctx, int cx, int cy, int color, float scale) {
+        int s = Math.max(1, (int)(3 * scale));
+        ctx.method_25294(cx - s, cy, cx + s, cy + s, color);
+        ctx.method_25294(cx - s * 3, cy - s * 2, cx - s, cy - s, color);
+        ctx.method_25294(cx - s, cy - s * 3, cx + s, cy - s, color);
+        ctx.method_25294(cx + s, cy - s * 2, cx + s * 3, cy - s, color);
+    }
+
+    /** Hanging vine accents on panel edges. */
+    public static void drawCornerVines(class_332 ctx, int w, int h, float phase) {
+        int vine = withAlpha(COL_ACCENT & 0xFFFFFF, 35);
+        for (int i = 0; i < 5; i++) {
+            int x = 8 + i * 18;
+            int len = 12 + (int)(Math.sin(phase * Math.PI * 2 + i) * 4);
+            ctx.method_25294(x, 0, x + 1, len, vine);
+            ctx.method_25294(x + 3, 0, x + 4, len - 4, vine);
+        }
+        for (int i = 0; i < 4; i++) {
+            int x = w - 12 - i * 22;
+            int len = 10 + (int)(Math.cos(phase * Math.PI * 2 + i * 0.7) * 3);
+            ctx.method_25294(x, h - len, x + 1, h, vine);
+        }
     }
 }

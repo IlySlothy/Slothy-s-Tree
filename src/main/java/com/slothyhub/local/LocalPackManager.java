@@ -19,6 +19,8 @@ import java.util.stream.Stream;
 public final class LocalPackManager {
 
     private static final String LOCAL_DIR = "slothyhub-local";
+    /** Exposed for {@link InstalledPackScanner}. */
+    static final String LOCAL_DIR_NAME = LOCAL_DIR;
 
     private LocalPackManager() {}
 
@@ -79,6 +81,10 @@ public final class LocalPackManager {
             obj.addProperty("downloads", 0);
             obj.addProperty("sha256", "");
             obj.addProperty("viewer_starred", false);
+            com.google.gson.JsonArray tags = new com.google.gson.JsonArray();
+            tags.add("elypvp");
+            tags.add("pvp");
+            obj.add("tags", tags);
             Pack p = new com.google.gson.Gson().fromJson(obj, Pack.class);
             p.setLocal(true);
             return p;

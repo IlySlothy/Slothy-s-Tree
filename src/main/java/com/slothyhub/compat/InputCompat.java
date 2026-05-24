@@ -27,20 +27,21 @@ public final class InputCompat {
 
     public static boolean delegateToChildren(class_4069 parent, double mx, double my, int button) {
         for (class_364 child : parent.method_25396()) {
-            boolean consumed;
-            if (NEEDS_POLLING) {
-                if (child instanceof CustomButtonBase btn) consumed = btn.tryPress(mx, my);
-                else consumed = callNewMouseClicked(child, mx, my, button);
-            } else {
-                consumed = callOldMouseClicked(child, mx, my, button);
-            }
-            if (consumed) {
+            if (clickChild(child, mx, my, button)) {
                 parent.method_25395(child);
                 if (button == 0) parent.method_25398(true);
                 return true;
             }
         }
         return false;
+    }
+
+    public static boolean clickChild(class_364 child, double mx, double my, int button) {
+        if (NEEDS_POLLING) {
+            if (child instanceof CustomButtonBase btn) return btn.tryPress(mx, my);
+            return callNewMouseClicked(child, mx, my, button);
+        }
+        return callOldMouseClicked(child, mx, my, button);
     }
 
     private static boolean callOldMouseClicked(class_364 child, double mx, double my, int button) {

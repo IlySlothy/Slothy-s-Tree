@@ -24,11 +24,13 @@ public class PackApiClient {
         IOException last = null;
         for (String path : new String[]{"/api/packs.json", "/api/packs"}) {
             try {
-                return fetchPacksFrom(serverUrl + path);
+                return PackCatalog.mergeWithEmbedded(fetchPacksFrom(serverUrl + path));
             } catch (IOException e) {
                 last = e;
             }
         }
+        List<Pack> embedded = PackCatalog.loadEmbedded();
+        if (!embedded.isEmpty()) return embedded;
         throw last != null ? last : new IOException("Could not load pack catalog from " + serverUrl);
     }
 

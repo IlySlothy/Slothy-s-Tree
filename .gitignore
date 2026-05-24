@@ -21,3 +21,7 @@ gradle-dist/
 gradle-8.12.1-bin.zip
 jdk21.zip
 jdk/
+
+# Local decompiled MC dumps (debug only)
+cit_javap.txt
+net_minecraft_class_*.java

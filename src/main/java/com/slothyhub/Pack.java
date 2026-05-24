@@ -47,6 +47,7 @@ public class Pack {
     public void setStarCount(int v) { star_count = Math.max(0, v); }
     public void setViewerStarred(boolean v) { viewer_starred = v; }
     public void setLocal(boolean v) { local = v; }
+    public void setHasLocalFile(boolean v) { has_local_file = v; }
 
     public String getTag() {
         if (tag != null && !tag.isBlank()) return tag;

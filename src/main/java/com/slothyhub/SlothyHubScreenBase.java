@@ -3,6 +3,7 @@ package com.slothyhub;
 import com.slothyhub.compat.DrawHelper;
 import com.slothyhub.compat.InputCompat;
 import com.slothyhub.local.LocalPackManager;
+import com.slothyhub.local.InstalledPackScanner;
 import com.slothyhub.ui.CustomButton;
 import com.slothyhub.ui.CustomButtonBase;
 import com.slothyhub.ui.Ui;
@@ -17,7 +18,6 @@ import net.minecraft.class_2561;
 import net.minecraft.class_2960;
 import net.minecraft.class_310;
 import net.minecraft.class_332;
-import net.minecraft.class_342;
 import net.minecraft.class_364;
 import net.minecraft.class_4068;
 import net.minecraft.class_437;
@@ -49,11 +49,11 @@ public abstract class SlothyHubScreenBase extends class_437 {
     private static int lerp(int a, int b, float t) { return Ui.lerpColor(a, b, t); }
 
     // ── Filter tabs ───────────────────────────────────────────────────────
-    private static final String[] TABS = {"All","Applied","Smp","NethPot","CPVP","ElyPVP","Local"};
+    private static final String[] TABS = {"All","Applied","Smp","NethPot","CPVP","ElyPVP"};
 
     // ── Main nav ──────────────────────────────────────────────────────────
     // nav[0]=PACKS, nav[1]=TEXTURES, nav[2]=KILL FX, nav[3]=FEATHER
-    private static final String[] NAV = {"PACKS","TEXTURES","KILL FX","FEATHER"};
+    private static final String[] NAV = {"PACKS","TEXTURES","LIBRARY","KILL FX","FEATHER"};
     private int activeNav = 0; // stays on PACKS in this screen
 
     // ── State ─────────────────────────────────────────────────────────────
@@ -85,7 +85,9 @@ public abstract class SlothyHubScreenBase extends class_437 {
     private String  error   = null;
     private double  scroll = 0, scrollTarget = 0;
 
-    private class_342 searchField;
+    private String searchQuery = "";
+    private boolean searchFocused = false;
+    private int searchX, searchY, searchW, searchH;
     private float gearHover = 0;
     private float cardEntryT = 0;
 
@@ -107,6 +109,7 @@ public abstract class SlothyHubScreenBase extends class_437 {
     private final int[] navW = new int[NAV.length];
     private int navY, navH;
     private int gearX, gearY, gearSz;
+    private int localCheckX, localCheckY, localCheckW, localCheckH;
 
     private final InputCompat.Poller inputPoller = new InputCompat.Poller();
 
@@ -128,45 +131,44 @@ public abstract class SlothyHubScreenBase extends class_437 {
         int bx = field_22789 / 2 - totalW / 2;
         int by = field_22790 - FOOTER + (FOOTER - bh) / 2;
 
-        addFooterButton(bx,            by, bw, bh, "RECONNECT", false, this::reconnect);
-        addFooterButton(bx + bw + gap, by, bw, bh, "RANDOM",    false, this::pickRandomPack);
-        addFooterButton(bx+(bw+gap)*2, by, bw, bh, "CLOSE",     true,  this::method_25419);
+        addFooterButton(bx,            by, bw, bh, "RECONNECT", false, () -> { Ui.playClick(); reconnect(); });
+        addFooterButton(bx + bw + gap, by, bw, bh, "RANDOM",    false, () -> { Ui.playClick(); pickRandomPack(); });
+        addFooterButton(bx+(bw+gap)*2, by, bw, bh, "CLOSE",     true,  () -> { Ui.playClick(); closeScreenNow(); });
 
-        // Search field
-        int sfW = Math.min(260, field_22789 / 3);
-        int sfH = 14;
-        int sfX = PAD + 30;
-        int sfY = HEADER + (TOOLBAR - sfH) / 2 + 1;
-
-        String prevText = searchField != null ? searchField.method_1882() : "";
-        searchField = new class_342(field_22793, sfX, sfY, sfW, sfH,
-            class_2561.method_43470("Search"));
-        searchField.method_1880(80);
-        searchField.method_47404(class_2561.method_43470("Search packs..."));
-        searchField.method_1858(false);
-        searchField.method_1868(TEXT);
-        searchField.method_1852(prevText);
-        searchField.method_1863(t -> { invalidateCache(); scrollTarget = 0; scroll = 0; });
-        method_37063(searchField);
+        layoutSearchBox();
 
         loading = true; error = null;
         executor.submit(() -> { SlothyConfig.tryAutoDiscover(); fetchPacks(); });
     }
+
+    private void layoutSearchBox() {
+        searchH = 16;
+        searchW = Math.min(220, Math.max(140, field_22789 / 5));
+        searchX = PAD;
+        searchY = HEADER + (TOOLBAR - searchH) / 2;
+    }
+
+    private int searchBoxRight() { return searchX + searchW + 28; }
 
     private void addFooterButton(int x, int y, int w, int h, String label, boolean primary, Runnable action) {
         CustomButtonBase.Style style = primary ? CustomButtonBase.Style.MOSS : CustomButtonBase.Style.SECONDARY;
         method_37063(new CustomButton(x, y, w, h, class_2561.method_43470(label), style, action));
     }
 
-    @Override
-    public void method_25419() {
-        if (previewPack != null) { previewPack = null; return; }
-        if (searchField != null && !searchField.method_1882().isEmpty()) {
-            searchField.method_1852(""); return;
-        }
+    private void closeScreenNow() {
+        previewPack = null;
         executor.shutdownNow();
         thumbs.values().forEach(t -> class_310.method_1551().method_1531().method_4615(t.id()));
         class_310.method_1551().method_1507(parent);
+    }
+
+    @Override
+    public void method_25419() {
+        if (previewPack != null) { previewPack = null; return; }
+        if (!searchQuery.isEmpty()) {
+            searchQuery = ""; invalidateCache(); return;
+        }
+        closeScreenNow();
     }
 
     @Override
@@ -193,7 +195,7 @@ public abstract class SlothyHubScreenBase extends class_437 {
         drawHeader(ctx, mx, my, delta);
         drawToolbar(ctx, mx, my, delta);
         drawList(ctx, mx, my, delta);
-        drawFooter(ctx);
+        drawFooter(ctx, mx, my);
 
         for (class_364 w : method_25396()) {
             if (w instanceof class_4068 d) d.method_25394(ctx, mx, my, delta);
@@ -214,6 +216,8 @@ public abstract class SlothyHubScreenBase extends class_437 {
             col(ACCENT, 6), col(BG, 0));
         if (SlothyConfig.isBackgroundEffects())
             Ui.renderLeafParallax(ctx, field_22789, field_22790, delta);
+        Ui.drawCornerVines(ctx, field_22789, field_22790,
+            (float)(System.currentTimeMillis() % 5000L) / 5000f);
     }
 
     // ── Header ─────────────────────────────────────────────────────────────
@@ -230,8 +234,10 @@ public abstract class SlothyHubScreenBase extends class_437 {
         ctx.method_25296(field_22789 / 2, 2, field_22789, 6, col(ACCENT, 0), col(ACCENT, 30));
 
         // ── Logo text ────────────────────────────────────────────────────
+        float phase = (float)(System.currentTimeMillis() % 4000L) / 4000f;
+        Ui.drawSlothBadge(ctx, field_22793, PAD, (HEADER - 14) / 2, phase);
         String logo = "SLOTHY'S TREE";
-        int logoX = PAD;
+        int logoX = PAD + 22;
         int logoY = (HEADER - 9) / 2 + 1;
         // Shadow for depth
         DrawHelper.drawText(ctx, field_22793, logo, logoX + 1, logoY + 1, col(0x000000, 80), false);
@@ -328,23 +334,27 @@ public abstract class SlothyHubScreenBase extends class_437 {
     private void drawToolbar(class_332 ctx, int mx, int my, float delta) {
         int top = HEADER, bot = HEADER + TOOLBAR;
         ctx.method_25294(0, top, field_22789, bot, BG);
-        // Subtle bottom separator
         ctx.method_25294(0, bot - 1, field_22789, bot, BORDER);
 
-        // Search box with subtle bg
-        if (searchField != null) {
-            int sx = searchField.method_46426() - 6;
-            int sy = searchField.method_46427() - 2;
-            int sw = searchField.method_25368() + 12;
-            int sh = searchField.method_25364() + 4;
-            ctx.method_25294(sx, sy, sx + sw, sy + sh, col(SURFACE & 0xFFFFFF, 120));
-            int lineCol = searchField.method_25370() ? ACCENT : BORDER;
-            ctx.method_25294(sx, sy + sh, sx + sw, sy + sh + 1, lineCol);
-            // Search icon (simple magnifier dots)
-            int iconX = sx - 16, iconY = sy + sh / 2 - 4;
-            ctx.method_25294(iconX, iconY, iconX + 5, iconY + 5, col(MUTED & 0xFFFFFF, 150));
-            ctx.method_25294(iconX + 2, iconY + 2, iconX + 4, iconY + 4, col(BG & 0xFFFFFF, 180));
-            ctx.method_25294(iconX + 4, iconY + 5, iconX + 6, iconY + 7, col(MUTED & 0xFFFFFF, 150));
+        // Search box — drawn manually (MC 1.21.8 TextField renders at wrong Y)
+        int sx = searchX - 2;
+        int sy = searchY - 2;
+        int sw = searchW + 4;
+        int sh = searchH + 4;
+        ctx.method_25294(sx, sy, sx + sw, sy + sh, col(SURFACE & 0xFFFFFF, 120));
+        int lineCol = searchFocused ? ACCENT : BORDER;
+        ctx.method_25294(sx, sy + sh, sx + sw, sy + sh + 1, lineCol);
+        int iconX = sx + 4, iconY = sy + sh / 2 - 2;
+        ctx.method_25294(iconX, iconY, iconX + 4, iconY + 4, col(MUTED & 0xFFFFFF, 150));
+        ctx.method_25294(iconX + 2, iconY + 2, iconX + 3, iconY + 3, col(BG & 0xFFFFFF, 180));
+        int textX = sx + 14;
+        int textY = sy + (sh - 8) / 2;
+        if (searchQuery.isEmpty() && !searchFocused) {
+            DrawHelper.drawText(ctx, field_22793, "Search packs...", textX, textY, MUTED, false);
+        } else {
+            String shown = searchQuery;
+            if (searchFocused && (System.currentTimeMillis() / 500) % 2 == 0) shown += "_";
+            DrawHelper.drawText(ctx, field_22793, shown, textX, textY, TEXT, false);
         }
 
         // Filter tabs — pill style, right-aligned
@@ -359,10 +369,7 @@ public abstract class SlothyHubScreenBase extends class_437 {
 
         int tabsRight = field_22789 - PAD;
         int tabsLeft  = tabsRight - totalTabW;
-        if (searchField != null) {
-            int sfRight = searchField.method_46426() + searchField.method_25368() + 24;
-            if (tabsLeft < sfRight) tabsLeft = sfRight;
-        }
+        if (tabsLeft < searchBoxRight()) tabsLeft = searchBoxRight();
 
         int tabH  = 16;
         int tabY  = top + (TOOLBAR - tabH) / 2;
@@ -394,6 +401,42 @@ public abstract class SlothyHubScreenBase extends class_437 {
         }
     }
 
+    private void drawLocalToggle(class_332 ctx, int mx, int my, int footTop) {
+        boolean showLocal = SlothyConfig.isShowLocalPacks();
+        String label = "Show local packs";
+        localCheckH = 12;
+        localCheckW = field_22793.method_1727(label) + 18;
+        localCheckX = PAD;
+        localCheckY = footTop + (FOOTER - localCheckH) / 2;
+        boolean lcHov = mx >= localCheckX && mx <= localCheckX + localCheckW
+            && my >= footTop && my < field_22790;
+        int box = localCheckX;
+        int boxY = localCheckY + 1;
+        ctx.method_25294(box, boxY, box + 10, boxY + 10, col(SURFACE & 0xFFFFFF, lcHov ? 200 : 140));
+        ctx.method_25294(box, boxY, box + 10, boxY + 1, lcHov || showLocal ? ACCENT : BORDER);
+        ctx.method_25294(box, boxY + 9, box + 10, boxY + 10, lcHov || showLocal ? ACCENT : BORDER);
+        ctx.method_25294(box, boxY, box + 1, boxY + 10, lcHov || showLocal ? ACCENT : BORDER);
+        ctx.method_25294(box + 9, boxY, box + 10, boxY + 10, lcHov || showLocal ? ACCENT : BORDER);
+        if (showLocal) {
+            ctx.method_25294(box + 2, boxY + 4, box + 4, boxY + 6, ACCENT);
+            ctx.method_25294(box + 3, boxY + 5, box + 8, boxY + 2, ACCENT);
+        }
+        DrawHelper.drawText(ctx, field_22793, label,
+            box + 14, localCheckY + 2, showLocal ? ACCENT : (lcHov ? TEXT : MUTED), false);
+    }
+
+    private boolean clickLocalCheckbox(double mx, double my) {
+        int footTop = field_22790 - FOOTER;
+        if (my < footTop || my >= field_22790) return false;
+        if (mx >= localCheckX && mx <= localCheckX + localCheckW) {
+            SlothyConfig.setShowLocalPacks(!SlothyConfig.isShowLocalPacks());
+            invalidateCache();
+            scroll = scrollTarget = 0;
+            return true;
+        }
+        return false;
+    }
+
     private boolean isTabActive(String tab) {
         if ("All".equals(tab)) return activeTabs.isEmpty();
         for (String t : activeTabs) if (t.equalsIgnoreCase(tab)) return true;
@@ -410,10 +453,7 @@ public abstract class SlothyHubScreenBase extends class_437 {
         totalTabW += gap * (TABS.length - 1);
         int tabsRight = field_22789 - PAD;
         int tabsLeft  = tabsRight - totalTabW;
-        if (searchField != null) {
-            int sfR = searchField.method_46426() + searchField.method_25368() + 24;
-            if (tabsLeft < sfR) tabsLeft = sfR;
-        }
+        if (tabsLeft < searchBoxRight()) tabsLeft = searchBoxRight();
         int tx = tabsLeft;
         for (int i = 0; i < TABS.length; i++) {
             int cw = tw[i];
@@ -436,9 +476,11 @@ public abstract class SlothyHubScreenBase extends class_437 {
 
     // ── Footer ────────────────────────────────────────────────────────────
 
-    private void drawFooter(class_332 ctx) {
-        ctx.method_25294(0, field_22790 - FOOTER, field_22789, field_22790, PANEL);
-        ctx.method_25294(0, field_22790 - FOOTER, field_22789, field_22790 - FOOTER + 1, BORDER);
+    private void drawFooter(class_332 ctx, int mx, int my) {
+        int footTop = field_22790 - FOOTER;
+        ctx.method_25294(0, footTop, field_22789, field_22790, PANEL);
+        ctx.method_25294(0, footTop, field_22789, footTop + 1, BORDER);
+        drawLocalToggle(ctx, mx, my, footTop);
     }
 
     // ── Pack list ─────────────────────────────────────────────────────────
@@ -461,7 +503,7 @@ public abstract class SlothyHubScreenBase extends class_437 {
             drawEmpty(ctx, top, listH, "No packs yet", "Drop packs into your slothyhub-local folder."); ctx.method_44380(); return;
         }
         if (visible.isEmpty()) {
-            String q = searchField != null ? searchField.method_1882().trim() : "";
+            String q = searchQuery.trim();
             String msg = q.isEmpty() ? "Try a different filter." : "No results for \"" + q + "\"";
             drawEmpty(ctx, top, listH, "Nothing here", msg); ctx.method_44380(); return;
         }
@@ -538,6 +580,7 @@ public abstract class SlothyHubScreenBase extends class_437 {
         ctx.method_25294(tX - 1, tY - 1, tX + THUMB + 1, tY + THUMB + 1,
             col(BORDER & 0xFFFFFF, (int)(120 + 100 * ht)));
         ctx.method_25294(tX, tY, tX + THUMB, tY + THUMB, col(0x0a1410, 255));
+        Ui.drawPawPrint(ctx, tX + THUMB / 2, tY + THUMB / 2, col(ACCENT & 0xFFFFFF, 40), 0.7f);
         Thumb thumb = thumbs.get(pack.getId());
         if (thumb != null) {
             float fa = Math.min(1f, thumbFadeIn.getOrDefault(pack.getId(), 0f) + delta * 0.12f);
@@ -785,76 +828,130 @@ public abstract class SlothyHubScreenBase extends class_437 {
 
     @Override
     public boolean method_25402(double mx, double my, int button) {
-        if (previewPack != null) { previewPack = null; return true; }
+        if (previewPack != null && button == 0) { previewPack = null; return true; }
 
+        // Header nav + gear first — never let toolbar/footer widgets steal these clicks
         if (button == 0) {
-            // Main nav clicks
             for (int i = 0; i < NAV.length; i++) {
                 if (mx >= navX[i] && mx <= navX[i] + navW[i] && my >= navY && my <= navY + navH) {
                     switch (i) {
-                        case 0 -> { /* already on PACKS */ return true; }
+                        case 0 -> { return true; }
                         case 1 -> { class_310.method_1551().method_1507(new TexturePickerScreen(this)); return true; }
-                        case 2 -> { class_310.method_1551().method_1507(new KillEffectsScreen(this)); return true; }
-                        case 3 -> { class_310.method_1551().method_1507(new FeatherProfilesScreen(this)); return true; }
+                        case 2 -> { class_310.method_1551().method_1507(new PackLibraryScreen(this)); return true; }
+                        case 3 -> { class_310.method_1551().method_1507(new KillEffectsScreen(this)); return true; }
+                        case 4 -> { class_310.method_1551().method_1507(new FeatherProfilesScreen(this)); return true; }
                     }
                 }
             }
-            // Gear
             if (mx >= gearX && mx <= gearX + gearSz && my >= gearY && my <= gearY + gearSz) {
                 class_310.method_1551().method_1507(new SlothySettingsScreen(this)); return true;
             }
         }
 
         if (button == 0 && clickTab(mx, my)) return true;
-        if (InputCompat.delegateToChildren(this, mx, my, button)) return true;
 
         int top  = HEADER + TOOLBAR, bot = field_22790 - FOOTER;
         int cardW = Math.min(field_22789 - PAD * 2, 860);
         int cardX = (field_22789 - cardW) / 2;
-        List<Pack> visible = filtered();
 
-        if (button == 0 && my > top && my < bot) {
-            int y = top - (int) scroll;
-            for (Pack pack : visible) {
-                if (y + CARD_H < top) { y += CARD_H; continue; }
-                if (y > bot) break;
-                int btnX = cardX + cardW - BTN_W - PAD - 2;
-                int btnY = y + (CARD_H - BTN_H) / 2;
-                if (!pack.isLocal()) {
-                    int starX = btnX - 44 - 6;
-                    if (mx >= starX && mx <= starX + 44 && my >= btnY && my <= btnY + BTN_H) {
-                        handleStar(pack); return true;
-                    }
+        // Pack cards before toolbar/footer widgets — search field must not steal list clicks
+        if (button == 0 && my > top && my < bot && handlePackListClick(mx, my, top, bot, cardX, cardW)) {
+            return true;
+        }
+
+        if (clickToolbarOrFooter(mx, my, button)) return true;
+        return false;
+    }
+
+    private boolean handlePackListClick(double mx, double my, int top, int bot, int cardX, int cardW) {
+        List<Pack> visible = filtered();
+        int y = top - (int) scroll;
+        for (Pack pack : visible) {
+            if (y + CARD_H < top) { y += CARD_H; continue; }
+            if (y > bot) break;
+            int btnX = cardX + cardW - BTN_W - PAD - 2;
+            int btnY = y + (CARD_H - BTN_H) / 2;
+            if (!pack.isLocal()) {
+                int starX = btnX - 44 - 6;
+                if (mx >= starX && mx <= starX + 44 && my >= btnY && my <= btnY + BTN_H) {
+                    handleStar(pack); return true;
                 }
-                if (mx >= btnX && mx <= btnX + BTN_W && my >= btnY && my <= btnY + BTN_H) {
-                    DlState s = dlState.getOrDefault(pack.getId(), DlState.IDLE);
-                    if (s == DlState.DOWNLOADING || s == DlState.APPLYING) return false;
-                    handlePackClick(pack); return true;
+            }
+            if (mx >= btnX && mx <= btnX + BTN_W && my >= btnY && my <= btnY + BTN_H) {
+                DlState s = dlState.getOrDefault(pack.getId(), DlState.IDLE);
+                if (s == DlState.DOWNLOADING || s == DlState.APPLYING) return false;
+                handlePackClick(pack); return true;
+            }
+            int tX = cardX + PAD + 6, tY = y + (CARD_H - THUMB) / 2;
+            if (mx >= tX && mx <= tX + THUMB && my >= tY && my <= tY + THUMB) {
+                previewPack = pack; return true;
+            }
+            y += CARD_H;
+        }
+        return false;
+    }
+
+    /** Search box + footer controls only — never intercept pack list clicks. */
+    private boolean clickToolbarOrFooter(double mx, double my, int button) {
+        int toolTop = HEADER, toolBot = HEADER + TOOLBAR;
+        int footTop = field_22790 - FOOTER;
+
+        if (my >= toolTop && my < toolBot) {
+            int sx = searchX - 2, sy = searchY - 2;
+            int sw = searchW + 4, sh = searchH + 4;
+            if (mx >= sx && mx <= sx + sw && my >= sy && my <= sy + sh) {
+                searchFocused = true;
+                return true;
+            }
+            if (searchFocused) searchFocused = false;
+        }
+
+        if (button == 0 && clickLocalCheckbox(mx, my)) return true;
+
+        if (my >= footTop && my < field_22790) {
+            for (class_364 child : method_25396()) {
+                if (child instanceof CustomButtonBase btn && btn.tryPress(mx, my)) {
+                    method_25395(child);
+                    if (button == 0) method_25398(true);
+                    return true;
                 }
-                // Thumbnail → preview
-                int tX = cardX + PAD + 6, tY = y + (CARD_H - THUMB) / 2;
-                if (mx >= tX && mx <= tX + THUMB && my >= tY && my <= tY + THUMB) {
-                    previewPack = pack; return true;
-                }
-                y += CARD_H;
             }
         }
         return false;
     }
 
-    public boolean onScrollDelta(double v) {
+    public boolean onScrollDelta(double vDelta) {
         if (previewPack != null) return true;
         int listH = field_22790 - HEADER - TOOLBAR - FOOTER;
         int totalH = filtered().size() * CARD_H;
-        scrollTarget = Math.max(0, Math.min(scrollTarget - v * 24, Math.max(0, totalH - listH)));
+        scrollTarget = Math.max(0, Math.min(scrollTarget - vDelta * 24, Math.max(0, totalH - listH)));
         return true;
+    }
+
+    @Override
+    public boolean method_25400(char chr, int modifiers) {
+        if (searchFocused) {
+            if (chr >= 32 && chr != 127 && searchQuery.length() < 80) {
+                searchQuery += chr;
+                invalidateCache();
+                scrollTarget = 0;
+                scroll = 0;
+            }
+            return true;
+        }
+        return super.method_25400(chr, modifiers);
     }
 
     @Override
     public boolean method_25404(int key, int scan, int mods) {
         if (previewPack != null && key == 256) { previewPack = null; return true; }
-        if (key == 256 && searchField != null && !searchField.method_1882().isEmpty()) {
-            searchField.method_1852(""); return true;
+        if (searchFocused && key == 259 && !searchQuery.isEmpty()) {
+            searchQuery = searchQuery.substring(0, searchQuery.length() - 1);
+            invalidateCache();
+            return true;
+        }
+        if (key == 256 && !searchQuery.isEmpty()) {
+            searchQuery = ""; searchFocused = false; invalidateCache(); return true;
         }
         if (InputCompat.needsPolling() && key == 256) { method_25419(); return true; }
         return super.method_25404(key, scan, mods);
@@ -869,8 +966,12 @@ public abstract class SlothyHubScreenBase extends class_437 {
 
     private void pickRandomPack() {
         List<Pack> vis = filtered();
-        if (vis.isEmpty()) { activeTabs.clear(); invalidateCache(); vis = filtered(); }
-        if (vis.isEmpty()) return;
+        if (vis.isEmpty()) {
+            activeTabs.clear();
+            invalidateCache();
+            vis = filtered();
+            if (vis.isEmpty()) return;
+        }
         Pack pick = vis.get((int)(Math.random() * vis.size()));
         int idx = vis.indexOf(pick);
         int listH = field_22790 - HEADER - TOOLBAR - FOOTER;
@@ -938,7 +1039,7 @@ public abstract class SlothyHubScreenBase extends class_437 {
     }
 
     private void fetchPacks() {
-        localPacks = LocalPackManager.getLocalPacks();
+        localPacks = InstalledPackScanner.scan(catalogFilenames(PackCatalog.loadEmbedded()));
         if (!SlothyConfig.isConfigured()) {
             allPacks = new ArrayList<>(localPacks);
             loading = false; return;
@@ -949,9 +1050,8 @@ public abstract class SlothyHubScreenBase extends class_437 {
                 List<Pack> loaded = PackApiClient.fetchPacks(srv);
                 class_310.method_1551().execute(() -> {
                     remotePacks = loaded;
-                    localPacks  = LocalPackManager.getLocalPacks();
-                    allPacks    = new ArrayList<>(remotePacks);
-                    allPacks.addAll(localPacks);
+                    localPacks  = InstalledPackScanner.scan(catalogFilenames(remotePacks));
+                    allPacks    = mergeCatalog(remotePacks, localPacks);
                     loading = false; error = null;
                     activeIds = PackDownloader.getActivePackIds();
                     for (Pack p : allPacks) {
@@ -970,8 +1070,9 @@ public abstract class SlothyHubScreenBase extends class_437 {
                 class_310.method_1551().execute(() -> {
                     error = fm;
                     loading = false;
-                    localPacks = LocalPackManager.getLocalPacks();
-                    allPacks = new ArrayList<>(localPacks);
+                    List<Pack> embedded = PackCatalog.loadEmbedded();
+                    localPacks = InstalledPackScanner.scan(catalogFilenames(embedded));
+                    allPacks = mergeCatalog(embedded, localPacks);
                 });
             }
         });
@@ -979,28 +1080,13 @@ public abstract class SlothyHubScreenBase extends class_437 {
 
     private void loadThumbs(String srv) {
         for (Pack p : allPacks) {
-            if (p.isLocal() || thumbs.containsKey(p.getId())) continue;
-            String url = p.getShowcaseUrl(srv);
-            if (url.isBlank()) continue;
-            executor.submit(() -> {
-                try {
-                    byte[] bytes = PackApiClient.downloadBytes(url);
-                    class_1011 img = class_1011.method_4309(new ByteArrayInputStream(bytes));
-                    int iw = img.method_4307(), ih = img.method_4323();
-                    class_310 mc = class_310.method_1551();
-                    mc.execute(() -> {
-                        String tn = "slothyhub_thumb_" + sanitize(p.getId());
-                        class_1043 tex = DrawHelper.createNativeTexture(tn, img);
-                        if (tex != null) {
-                            class_2960 id = class_2960.method_60655("slothyhub", "thumb/" + sanitize(p.getId()));
-                            mc.method_1531().method_4616(id, tex);
-                            thumbs.put(p.getId(), new Thumb(id, iw, ih));
-                            thumbFadeIn.put(p.getId(), 0f);
-                        }
-                    });
-                } catch (Exception e) {
-                    SlothyHubMod.LOGGER.warn("Thumb load fail {}: {}", p.getId(), e.getMessage());
+            if (thumbs.containsKey(p.getId())) continue;
+            PackIconLoader.loadIcon(p, srv, new PackIconLoader.IconCallback() {
+                public void onLoaded(String packId, class_2960 id, int w, int h) {
+                    thumbs.put(packId, new Thumb(id, w, h));
+                    thumbFadeIn.put(packId, 0f);
                 }
+                public void onFailed(String packId) {}
             });
         }
     }
@@ -1008,22 +1094,22 @@ public abstract class SlothyHubScreenBase extends class_437 {
     // ── Filter / cache ────────────────────────────────────────────────────
 
     private List<Pack> filtered() {
-        String q = searchField != null ? searchField.method_1882().trim().toLowerCase(Locale.ROOT) : "";
+        String q = searchQuery.trim().toLowerCase(Locale.ROOT);
         Set<String> tabs = new LinkedHashSet<>(activeTabs);
-        boolean appliedOnly = false, localOnly = false;
+        boolean appliedOnly = false;
         Set<String> tagSet = new LinkedHashSet<>();
         for (String t : tabs) {
             if ("Applied".equalsIgnoreCase(t)) appliedOnly = true;
-            else if ("Local".equalsIgnoreCase(t)) localOnly = true;
             else tagSet.add(t);
         }
-        String key = String.join(",", tabs) + "\0" + q + "\0" + (appliedOnly ? activeIds.hashCode() : "");
+        String key = String.join(",", tabs) + "\0" + q + "\0" + (appliedOnly ? activeIds.hashCode() : "")
+            + "\0" + SlothyConfig.isShowLocalPacks();
         if (filteredCache != null && filteredSrc == allPacks && key.equals(filteredKey)) return filteredCache;
 
         List<Pack> out = new ArrayList<>();
         for (Pack p : allPacks) {
+            if (!SlothyConfig.isShowLocalPacks() && p.isLocal()) continue;
             if (appliedOnly && !activeIds.contains(p.getId())) continue;
-            if (localOnly && !p.isLocal()) continue;
             if (!tagSet.isEmpty() && !packMatchesTags(p, tagSet)) continue;
             if (!q.isEmpty()) {
                 String hay = (p.getName() + " " + p.getAuthorName() + " " + String.join(" ", p.getTags()))
@@ -1043,6 +1129,36 @@ public abstract class SlothyHubScreenBase extends class_437 {
     }
 
     private void invalidateCache() { filteredCache = null; filteredSrc = null; filteredKey = null; }
+
+    private static Set<String> catalogFilenames(List<Pack> catalog) {
+        Set<String> out = new HashSet<>(PackCatalog.embeddedFilenames());
+        for (Pack p : catalog) {
+            if (p.getPackFilename() != null && !p.getPackFilename().isBlank())
+                out.add(p.getPackFilename().toLowerCase(Locale.ROOT));
+        }
+        return out;
+    }
+
+    private static List<Pack> mergeCatalog(List<Pack> remote, List<Pack> installed) {
+        Map<String, Pack> byFile = new LinkedHashMap<>();
+        for (Pack p : remote) {
+            if (p.getPackFilename() != null && !p.getPackFilename().isBlank())
+                byFile.put(p.getPackFilename().toLowerCase(Locale.ROOT), p);
+            else
+                byFile.put("id:" + p.getId(), p);
+        }
+        for (Pack p : installed) {
+            String key = p.getPackFilename().toLowerCase(Locale.ROOT);
+            Pack existing = byFile.get(key);
+            if (existing != null) {
+                existing.setHasLocalFile(true);
+                existing.setLocal(false);
+            } else {
+                byFile.put(key, p);
+            }
+        }
+        return new ArrayList<>(byFile.values());
+    }
 
     // ── Utilities ─────────────────────────────────────────────────────────
 

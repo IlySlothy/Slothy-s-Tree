@@ -2,8 +2,13 @@
   "required": true,
   "package": "com.slothyhub.mixin",
   "compatibilityLevel": "JAVA_21",
+  "plugin": "com.slothyhub.cit.CitMixinPlugin",
   "client": [
-    "MixinCitItemRenderState"
+    "MixinCitItemRenderState",
+    "MixinCitItemRenderStateClear",
+    "MixinCitItemModelBake",
+    "MixinCitItemLayerDraw",
+    "MixinCitLegacyItemRenderer"
   ],
   "injectors": {
     "defaultRequire": 0

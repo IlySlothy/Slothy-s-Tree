@@ -34,6 +34,7 @@ public class SlothyConfig {
     private static int cacheExpiry = 30;
     private static String killEffect = "totem";
     private static boolean citEnabled = true;
+    private static boolean showLocalPacks = true;
 
     public static String getServerUrl() {
         return urlOverride != null && !urlOverride.isBlank() ? urlOverride : serverUrl;
@@ -85,6 +86,7 @@ public class SlothyConfig {
     public static boolean isReducedMotion() { return reducedMotion; }
     public static int getCacheExpiry() { return cacheExpiry; }
     public static boolean isCitEnabled() { return citEnabled; }
+    public static boolean isShowLocalPacks() { return showLocalPacks; }
 
     public static void setBatchedReload(boolean v) { batchedReload = v; save(); }
     public static void setPrefetchThumbnails(boolean v) { prefetchThumbnails = v; save(); }
@@ -99,6 +101,7 @@ public class SlothyConfig {
     public static void setReducedMotion(boolean v) { reducedMotion = v; save(); }
     public static void setCacheExpiry(int v) { cacheExpiry = Math.max(5, Math.min(120, v)); save(); }
     public static void setCitEnabled(boolean v) { citEnabled = v; save(); }
+    public static void setShowLocalPacks(boolean v) { showLocalPacks = v; save(); }
 
     public static void setKillEffect(String v) {
         if (!"none".equals(v) && !"totem".equals(v) && !"anvil".equals(v) && !"thunder".equals(v)) {
@@ -145,6 +148,7 @@ public class SlothyConfig {
                 if (obj.has("reducedMotion"))          reducedMotion          = obj.get("reducedMotion").getAsBoolean();
                 if (obj.has("cacheExpiry"))            cacheExpiry            = Math.max(5, Math.min(120, obj.get("cacheExpiry").getAsInt()));
                 if (obj.has("citEnabled"))             citEnabled             = obj.get("citEnabled").getAsBoolean();
+                if (obj.has("showLocalPacks"))         showLocalPacks         = obj.get("showLocalPacks").getAsBoolean();
             }
             if (voterId == null || voterId.isBlank()) {
                 voterId = UUID.randomUUID().toString();
@@ -174,6 +178,7 @@ public class SlothyConfig {
         obj.addProperty("reducedMotion",          reducedMotion);
         obj.addProperty("cacheExpiry",            cacheExpiry);
         obj.addProperty("citEnabled",             citEnabled);
+        obj.addProperty("showLocalPacks",         showLocalPacks);
         try {
             Files.writeString(CONFIG_PATH, GSON.toJson(obj));
         } catch (IOException e) {

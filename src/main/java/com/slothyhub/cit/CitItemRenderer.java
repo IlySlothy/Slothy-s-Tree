@@ -2,11 +2,17 @@ package com.slothyhub.cit;
 
 import com.slothyhub.SlothyHubMod;
 import net.minecraft.class_10444;
+import net.minecraft.class_1921;
+import net.minecraft.class_1058;
 import net.minecraft.class_1799;
+import net.minecraft.class_2960;
+import net.minecraft.class_777;
+import net.minecraft.class_7923;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.util.List;
 import java.util.Locale;
 import java.util.function.Function;
 
@@ -14,35 +20,56 @@ import java.util.function.Function;
  * CIT render-time applicator for MC 1.21.8.
  *
  * Called from {@link com.slothyhub.mixin.MixinCitItemRenderState} at the TAIL of
- * class_10442.method_65597. Checks the ItemStack against active CIT rules and,
- * when a rule matches, replaces the model reference inside the render-state layers.
- *
- * Works by reflection so the same class file runs on multiple Minecraft versions.
+ * class_10442.method_65598 after item quads are baked.
  */
 public final class CitItemRenderer {
 
     private CitItemRenderer() {}
 
-    // ── Cached reflection handles ─────────────────────────────────────────
+    // ── Cached reflection handles (model override path only) ────────────────
 
-    /** ItemStack → Item  (class_1799.getItem) */
-    private static volatile Method  GET_ITEM;
-    /** Registry<Item> singleton */
-    private static volatile Object  ITEM_REGISTRY;
-    /** Registry.getId(Item) → Identifier */
-    private static volatile Method  GET_ID;
+    /** Legacy model field inside each layer (only used when rule.model is set). */
+    private static volatile Field LAYER_MODEL_FIELD;
 
-    /** ItemStack.hasCustomName() → boolean */
-    private static volatile Method  HAS_CUSTOM_NAME;
-    /** ItemStack.getCustomName() / getName() → Text */
-    private static volatile Method  GET_CUSTOM_NAME;
-    /** Text.getString() → String */
-    private static volatile Method  GET_STRING;
+    /** ItemRenderState layer array (field name varies 1.21.4–1.21.8). */
+    private static final Field LAYERS_ARRAY = resolveLayersField();
+    /** Active layer count field on ItemRenderState. */
+    private static final Field LAYER_COUNT = resolveLayerCountField();
 
-    /** Array field on class_10444 holding the layer objects */
-    private static volatile Field   LAYERS_FIELD;
-    /** The model field inside each layer (may be Object-typed in 1.21.8) */
-    private static volatile Field   LAYER_MODEL_FIELD;
+    private static Field resolveLayersField() {
+        Class<?> layerType = class_10444.class_10446.class;
+        for (Field f : class_10444.class.getDeclaredFields()) {
+            if (!f.getType().isArray()) continue;
+            Class<?> component = f.getType().getComponentType();
+            if (component == null || !layerType.isAssignableFrom(component)) continue;
+            f.setAccessible(true);
+            return f;
+        }
+        try {
+            Field f = class_10444.class.getDeclaredField("field_55340");
+            f.setAccessible(true);
+            return f;
+        } catch (Exception e) {
+            SlothyHubMod.LOGGER.warn("CIT: could not resolve item render layer array");
+            return null;
+        }
+    }
+
+    private static Field resolveLayerCountField() {
+        try {
+            Field f = class_10444.class.getDeclaredField("field_55339");
+            f.setAccessible(true);
+            return f;
+        } catch (Exception ignored) {}
+        for (Field f : class_10444.class.getDeclaredFields()) {
+            if (f.getType() == int.class) {
+                f.setAccessible(true);
+                return f;
+            }
+        }
+        SlothyHubMod.LOGGER.warn("CIT: could not resolve item render layer count");
+        return null;
+    }
 
     /**
      * Function fields on class_10442 (ItemRenderStateManager) used to look up
@@ -57,183 +84,78 @@ public final class CitItemRenderer {
 
     public static void applyIfNeeded(class_10444 renderState, class_1799 stack, Object manager) {
         CitRuleSet ruleSet = CitRuleSet.active();
-        if (ruleSet.isEmpty()) return;
+        if (ruleSet.isEmpty() || LAYERS_ARRAY == null) return;
 
-        ensureResolved(renderState, stack, manager);
+        ensureModelFieldResolved(renderState, manager);
 
         String itemId = resolveItemId(stack);
         if (itemId == null) return;
 
-        String displayName = resolveCustomName(stack);   // null if no custom name
-        CitRule rule = ruleSet.findMatch(itemId, displayName);
-        if (rule == null || rule.texture.isBlank()) return;
-
-        Object overrideModel = findOverrideModel(manager, rule.texture, stack);
-        if (overrideModel == null) {
-            SlothyHubMod.LOGGER.debug("CIT: no override model found for texture '{}'", rule.texture);
+        List<String> matchNames = CitStackNames.resolve(stack);
+        CitRule rule = ruleSet.findMatch(itemId, matchNames);
+        if (rule == null || rule.texture.isBlank()) {
+            CitRenderCache.clear(renderState);
+            logNearMiss(itemId, matchNames);
             return;
         }
 
-        applyModelToLayers(renderState, overrideModel);
+        logMatchOnce(itemId, rule, matchNames);
+
+        // Only use explicit model overrides — texture-only CIT rules must use virtual sprites
+        if (!rule.model.isBlank()) {
+            Object overrideModel = findOverrideModel(manager, rule, stack);
+            if (overrideModel != null) {
+                applyModelToLayers(renderState, overrideModel);
+                return;
+            }
+        }
+
+        class_1058 sprite = CitVirtualTextures.spriteForRule(rule);
+        if (sprite != null) {
+            class_2960 texId = CitVirtualTextures.textureForRule(rule);
+            CitRenderCache.remember(renderState, stack, sprite, texId);
+            applySpriteToLayers(renderState, sprite, texId);
+            return;
+        }
+
+        class_2960 virtualTex = CitVirtualTextures.textureForRule(rule);
+        if (virtualTex != null) {
+            SlothyHubMod.LOGGER.debug("CIT: sprite missing for '{}' ({})", rule.texture, rule.id);
+        } else {
+            SlothyHubMod.LOGGER.debug("CIT: no override for texture '{}' ({})", rule.texture, rule.id);
+        }
     }
 
     // ── One-time reflection setup ─────────────────────────────────────────
 
     @SuppressWarnings("unchecked")
-    private static void ensureResolved(class_10444 renderState, class_1799 stack, Object manager) {
+    private static void ensureModelFieldResolved(class_10444 renderState, Object manager) {
         if (RESOLVED) return;
         RESOLVED = true;
         try {
-            resolveItemIdMethods(stack);
-            resolveCustomNameMethods(stack);
-            resolveLayerFields(renderState);
+            resolveLayerModelField(renderState);
             resolveManagerFunctions(manager);
         } catch (Exception e) {
             SlothyHubMod.LOGGER.warn("CIT: reflection setup failed: {}", e.getMessage());
         }
     }
 
-    private static void resolveItemIdMethods(class_1799 stack) {
-        ClassLoader cl = stack.getClass().getClassLoader();
-
-        // Find getItem() — the method with 0 params returning a net.minecraft item class
-        for (Method m : stack.getClass().getMethods()) {
-            if (m.getParameterCount() == 0
-                    && m.getReturnType().getName().startsWith("net.minecraft.")
-                    && !m.getReturnType().getName().contains("class_1799")
-                    && !m.getReturnType().isPrimitive()) {
-                // Heuristic: getItem() returns an Item class (not Text, not a component, etc.)
-                String name = m.getName().toLowerCase(Locale.ROOT);
-                if (name.equals("method_7909") || name.equals("getitem") || name.contains("item")) {
-                    GET_ITEM = m; break;
-                }
+    private static void resolveLayerModelField(class_10444 renderState) {
+        if (LAYERS_ARRAY == null) return;
+        try {
+            class_10444.class_10446[] layers = (class_10444.class_10446[]) LAYERS_ARRAY.get(renderState);
+            Class<?> layerType = class_10444.class_10446.class;
+            if (layers != null && layers.length > 0 && layers[0] != null) {
+                layerType = layers[0].getClass();
             }
-        }
-        if (GET_ITEM == null) {
-            // Fallback: first MC-returning 0-arg method
-            for (Method m : stack.getClass().getMethods()) {
-                if (m.getParameterCount() == 0
-                        && m.getReturnType().getName().startsWith("net.minecraft.")
-                        && !m.getReturnType().isPrimitive()
-                        && !m.getReturnType().isArray()) {
-                    GET_ITEM = m; break;
-                }
-            }
-        }
-
-        // Find Registries.ITEM registry
-        String[] regClassNames = {
-            "net.minecraft.registry.Registries",
-            "net.minecraft.class_7923",
-            "net.minecraft.class_2378"
-        };
-        outer:
-        for (String cn : regClassNames) {
-            try {
-                Class<?> cls = Class.forName(cn, false, cl);
-                for (Field f : cls.getDeclaredFields()) {
-                    if (!Modifier.isStatic(f.getModifiers())) continue;
-                    f.setAccessible(true);
-                    Object reg = f.get(null);
-                    if (reg == null) continue;
-                    String fn = f.getName().toLowerCase(Locale.ROOT);
-                    if (!fn.contains("item") && !fn.equals("field_11142") && !fn.equals("field_29723")) continue;
-                    // Verify it has a getId(Object)->Identifier method
-                    for (Method m : reg.getClass().getMethods()) {
-                        if (m.getParameterCount() == 1) {
-                            String rn = m.getReturnType().getName();
-                            if (rn.contains("class_2960") || rn.endsWith("Identifier")) {
-                                ITEM_REGISTRY = reg;
-                                GET_ID = m;
-                                break outer;
-                            }
-                        }
-                    }
-                }
-            } catch (Exception ignored) {}
-        }
-    }
-
-    private static void resolveCustomNameMethods(class_1799 stack) {
-        // Look specifically for hasCustomName() → boolean and getCustomName() → Text
-        for (Method m : stack.getClass().getMethods()) {
-            String mn = m.getName();
-            // hasCustomName: 0 params, returns boolean
-            if (HAS_CUSTOM_NAME == null && m.getParameterCount() == 0 && m.getReturnType() == boolean.class) {
-                if (mn.equals("method_6801") || mn.toLowerCase(Locale.ROOT).contains("hascustom")
-                        || mn.equals("hasCustomName")) {
-                    HAS_CUSTOM_NAME = m;
-                }
-            }
-            // getCustomName / getName: 0 params, returns Text
-            if (m.getParameterCount() == 0 && !m.getReturnType().isPrimitive()) {
-                String rt = m.getReturnType().getName();
-                if (rt.contains("class_2561") || rt.contains("Text") || rt.contains("MutableText")) {
-                    // Prefer getCustomName (method_6835) over getName (method_11102)
-                    if (mn.equals("method_6835") || mn.equalsIgnoreCase("getCustomName")) {
-                        GET_CUSTOM_NAME = m;
-                    } else if (GET_CUSTOM_NAME == null
-                            && (mn.equals("method_11102") || mn.equalsIgnoreCase("getName"))) {
-                        GET_CUSTOM_NAME = m;
-                    }
-                }
-            }
-        }
-        // Resolve getString() on the Text class
-        if (GET_CUSTOM_NAME != null && GET_STRING == null) {
-            for (Method s : GET_CUSTOM_NAME.getReturnType().getMethods()) {
-                if (s.getParameterCount() == 0 && s.getReturnType() == String.class
-                        && (s.getName().equals("getString") || s.getName().equals("method_1238"))) {
-                    GET_STRING = s; break;
-                }
-            }
-        }
-    }
-
-    private static void resolveLayerFields(class_10444 renderState) {
-        // Find the array field in class_10444 holding the layers
-        for (Field f : renderState.getClass().getDeclaredFields()) {
-            if (!f.getType().isArray()) continue;
-            Class<?> layerType = f.getType().getComponentType();
-            if (layerType == null || layerType.isPrimitive()) continue;
-            // Must be an array of objects (the render layers)
-            f.setAccessible(true);
-            LAYERS_FIELD = f;
-
-            // Find the model field inside the layer:
-            // In 1.21.4 it was a net.minecraft.class_1087 typed field.
-            // In 1.21.8 it may be stored as java.lang.Object (field_55351).
-            // Strategy: pick the last non-primitive, non-parent, non-array field.
-            Field candidate = null;
             for (Field lf : layerType.getDeclaredFields()) {
-                if (lf.getType().isPrimitive()) continue;
-                if (lf.getType().isArray()) continue;
-                // Skip the back-reference to the parent render state
-                if (lf.getType() == renderState.getClass()) continue;
-                // Prefer net.minecraft typed fields (BakedModel in 1.21.4)
-                String typeName = lf.getType().getName();
-                if (typeName.startsWith("net.minecraft.")
-                        && !typeName.contains("class_10444")
-                        && !typeName.contains("Supplier")
-                        && !typeName.contains("List")) {
-                    candidate = lf;
+                if (lf.getType() == Object.class) {
+                    lf.setAccessible(true);
+                    LAYER_MODEL_FIELD = lf;
                     break;
                 }
             }
-            if (candidate == null) {
-                // Fallback: use the Object-typed field (1.21.8 layout)
-                for (Field lf : layerType.getDeclaredFields()) {
-                    if (lf.getType() == Object.class) {
-                        candidate = lf; break;
-                    }
-                }
-            }
-            if (candidate != null) {
-                candidate.setAccessible(true);
-                LAYER_MODEL_FIELD = candidate;
-            }
-            if (LAYER_MODEL_FIELD != null) break;
-        }
+        } catch (Exception ignored) {}
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -257,31 +179,55 @@ public final class CitItemRenderer {
     // ── Runtime helpers ───────────────────────────────────────────────────
 
     private static String resolveItemId(class_1799 stack) {
-        if (GET_ITEM == null || ITEM_REGISTRY == null || GET_ID == null) return null;
         try {
-            Object item = GET_ITEM.invoke(stack);
-            if (item == null) return null;
-            Object id = GET_ID.invoke(ITEM_REGISTRY, item);
-            return id != null ? id.toString() : null;
+            return class_7923.field_41178.method_10221(stack.method_7909()).toString();
         } catch (Exception e) { return null; }
     }
 
-    /**
-     * Returns the item's custom (anvil) display name, or null if it has none.
-     * CIT name rules match against the custom name, not the default item name.
-     */
-    private static String resolveCustomName(class_1799 stack) {
-        try {
-            // Check hasCustomName first to avoid matching the default item name
-            if (HAS_CUSTOM_NAME != null) {
-                Boolean has = (Boolean) HAS_CUSTOM_NAME.invoke(stack);
-                if (has == null || !has) return null;
-            }
-            if (GET_CUSTOM_NAME == null || GET_STRING == null) return null;
-            Object text = GET_CUSTOM_NAME.invoke(stack);
-            if (text == null) return null;
-            return (String) GET_STRING.invoke(text);
-        } catch (Exception e) { return null; }
+    /** Primary display string for logging / UI. */
+    static String resolveDisplayName(class_1799 stack) {
+        List<String> names = CitStackNames.resolve(stack);
+        return names.isEmpty() ? null : names.get(0);
+    }
+
+    static List<String> resolveMatchNames(class_1799 stack) {
+        return CitStackNames.resolve(stack);
+    }
+
+    private static long lastNearMissLogMs;
+    private static String lastNearMissKey = "";
+    private static long lastMatchLogMs;
+    private static String lastMatchKey = "";
+
+    private static void logMatchOnce(String itemId, CitRule rule, List<String> names) {
+        long now = System.currentTimeMillis();
+        String key = rule.id + "|" + itemId;
+        if (key.equals(lastMatchKey) && now - lastMatchLogMs < 8000) return;
+        lastMatchKey = key;
+        lastMatchLogMs = now;
+        SlothyHubMod.LOGGER.info("CIT: matched rule {} for {} (names={})", rule.id, itemId, names);
+    }
+
+    /** Throttled log when a netherite sword has names but no CIT rule matched. */
+    private static void logNearMiss(String itemId, List<String> names) {
+        if (!itemId.contains("netherite_sword")) return;
+        long now = System.currentTimeMillis();
+        String key = itemId + "|" + String.join(",", names);
+        if (key.equals(lastNearMissKey) && now - lastNearMissLogMs < 8000) return;
+        lastNearMissKey = key;
+        lastNearMissLogMs = now;
+        if (names.isEmpty()) {
+            SlothyHubMod.LOGGER.info("CIT: no rule matched {} (no display strings)", itemId);
+        } else if (names.size() <= 2 && names.stream().allMatch(n -> n.toLowerCase(Locale.ROOT).contains("netherite"))) {
+            SlothyHubMod.LOGGER.info("CIT: no rule matched {} — plain netherite sword (rename it or use a tier sword with MYTHIC/Warden tag)", itemId);
+        } else {
+            SlothyHubMod.LOGGER.info("CIT: no rule matched {} names={}", itemId, names);
+        }
+    }
+
+    static String stripFormatting(String text) {
+        if (text == null) return null;
+        return text.replaceAll("§.", "").trim();
     }
 
     /**
@@ -292,14 +238,17 @@ public final class CitItemRenderer {
      * 2. Construct an Identifier and look up from MinecraftClient's model manager.
      */
     @SuppressWarnings({"unchecked", "rawtypes"})
-    private static Object findOverrideModel(Object manager, String texturePath, class_1799 stack) {
+    private static Object findOverrideModel(Object manager, CitRule rule, class_1799 stack) {
+        String texturePath = rule.texture;
         // Normalize texture path to a full identifier
         String norm = texturePath;
         if (!norm.contains(":")) norm = "minecraft:" + norm;
 
         // Strategy 1: use the manager's Function fields
-        // These map Identifier → ItemModel (or similar) internally
         Object identifier = makeIdentifier(norm, stack.getClass().getClassLoader());
+        if (identifier == null && !texturePath.contains("/")) {
+            identifier = makeIdentifier("minecraft:item/" + texturePath, stack.getClass().getClassLoader());
+        }
         if (identifier != null) {
             if (MANAGER_FUNC_A != null) {
                 try {
@@ -316,7 +265,11 @@ public final class CitItemRenderer {
         }
 
         // Strategy 2: BakedModelManager (works on 1.21.4; may not on 1.21.8)
-        return findViaModelManager(texturePath, stack.getClass().getClassLoader());
+        Object viaMgr = findViaModelManager(texturePath, stack.getClass().getClassLoader());
+        if (viaMgr != null) return viaMgr;
+        if (!texturePath.contains("/"))
+            return findViaModelManager("item/" + texturePath, stack.getClass().getClassLoader());
+        return null;
     }
 
     private static Object makeIdentifier(String path, ClassLoader cl) {
@@ -399,12 +352,73 @@ public final class CitItemRenderer {
         return null;
     }
 
-    private static void applyModelToLayers(class_10444 renderState, Object overrideModel) {
-        if (LAYERS_FIELD == null || LAYER_MODEL_FIELD == null) return;
+    public static void clearRenderCache(class_10444 renderState) {
+        CitRenderCache.clear(renderState);
+    }
+
+    /** Called from {@link com.slothyhub.mixin.MixinCitItemLayerDraw} right before quads draw. */
+    public static void patchBeforeDraw(class_10444 renderState, class_10444.class_10446 layer) {
+        if (renderState == null || layer == null) return;
+
+        // Only re-bind what applyIfNeeded stored for this render pass — never re-match from a stale stack.
+        class_1058 sprite = CitRenderCache.sprite(renderState);
+        class_2960 textureId = CitRenderCache.texture(renderState);
+        if (sprite == null || textureId == null) return;
+
+        patchLayer(layer, sprite, textureId);
+    }
+
+    private static void patchLayer(class_10444.class_10446 layer, class_1058 sprite, class_2960 textureId) {
+        if (layer == null || sprite == null) return;
+        if (textureId != null) {
+            try {
+                // Same layer type vanilla items use (entity_cutout), bound to our CIT texture.
+                layer.method_67992(class_1921.method_23576(textureId));
+            } catch (Exception e) {
+                SlothyHubMod.LOGGER.debug("CIT: render layer bind failed for {}: {}", textureId, e.getMessage());
+            }
+        }
+        List<class_777> quads = layer.method_67997();
+        if (quads == null || quads.isEmpty()) return;
+        layer.method_67994(sprite);
+        for (int i = 0; i < quads.size(); i++) {
+            class_777 q = quads.get(i);
+            class_777 patched = CitQuadRemapper.withSprite(q, sprite);
+            if (patched != q) quads.set(i, patched);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void applySpriteToLayers(class_10444 renderState, class_1058 sprite, class_2960 textureId) {
+        if (LAYERS_ARRAY == null || sprite == null) return;
         try {
-            Object[] layers = (Object[]) LAYERS_FIELD.get(renderState);
+            class_10444.class_10446[] layers = (class_10444.class_10446[]) LAYERS_ARRAY.get(renderState);
             if (layers == null) return;
-            for (Object layer : layers) {
+            int count = activeLayerCount(renderState);
+            for (int i = 0; i < count && i < layers.length; i++) {
+                class_10444.class_10446 layer = layers[i];
+                if (layer != null) patchLayer(layer, sprite, textureId);
+            }
+        } catch (Exception e) {
+            SlothyHubMod.LOGGER.debug("CIT: failed to write sprite to render state: {}", e.getMessage());
+        }
+    }
+
+    private static int activeLayerCount(class_10444 renderState) {
+        if (LAYER_COUNT != null) {
+            try {
+                return Math.max(0, LAYER_COUNT.getInt(renderState));
+            } catch (Exception ignored) {}
+        }
+        return renderState.method_65606() ? 0 : 1;
+    }
+
+    private static void applyModelToLayers(class_10444 renderState, Object overrideModel) {
+        if (LAYERS_ARRAY == null || LAYER_MODEL_FIELD == null) return;
+        try {
+            class_10444.class_10446[] layers = (class_10444.class_10446[]) LAYERS_ARRAY.get(renderState);
+            if (layers == null) return;
+            for (class_10444.class_10446 layer : layers) {
                 if (layer == null) continue;
                 LAYER_MODEL_FIELD.set(layer, overrideModel);
             }

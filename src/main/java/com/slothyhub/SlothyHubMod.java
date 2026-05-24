@@ -43,6 +43,7 @@ public class SlothyHubMod implements ClientModInitializer {
         SlothyConfig.load();
         LocalPackManager.init();
         CitEngine.init();
+        PackMcmetaRepair.scanAndFixAsync();
 
         LOGGER.info("SlothyHub loaded. Server: {}",
             SlothyConfig.isConfigured() ? SlothyConfig.getServerUrl() : "(unset)");
@@ -80,6 +81,7 @@ public class SlothyHubMod implements ClientModInitializer {
                     int h = mc.method_22683().method_4502();
                     float delta = getTickDeltaCompat(tickCounter);
                     Ui.renderKillEffect(drawContext, w, h, delta);
+                    Ui.renderTotemPop(drawContext, w, h, delta);
                 }
             }
         });
@@ -88,6 +90,14 @@ public class SlothyHubMod implements ClientModInitializer {
             if (screen instanceof SlothyHubScreenBase slothyScreen) {
                 ScreenMouseEvents.beforeMouseScroll(screen).register(
                     (scr, mx, my, hDelta, vDelta) -> slothyScreen.onScrollDelta(vDelta));
+            }
+            if (screen instanceof TexturePickerScreen textureScreen) {
+                ScreenMouseEvents.beforeMouseScroll(screen).register(
+                    (scr, mx, my, hDelta, vDelta) -> textureScreen.onScrollDelta(mx, vDelta));
+            }
+            if (screen instanceof PackLibraryScreen libraryScreen) {
+                ScreenMouseEvents.beforeMouseScroll(screen).register(
+                    (scr, mx, my, hDelta, vDelta) -> libraryScreen.onScrollDelta(vDelta));
             }
             if (screen instanceof class_442 titleScreen) {
                 class_4185 btn = class_4185.method_46430(

@@ -24,8 +24,8 @@ public abstract class CustomButtonBase extends class_339 {
     public void method_25348(double mouseX, double mouseY) { doPress(); }
 
     public boolean tryPress(double mx, double my) {
-        if (field_22763 && field_22764
-            && mx >= method_46426() && mx <= method_46426() + method_25368()
+        if (!field_22763) return false;
+        if (mx >= method_46426() && mx <= method_46426() + method_25368()
             && my >= method_46427() && my <= method_46427() + method_25364()) {
             doPress(); return true;
         }
