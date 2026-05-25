@@ -1244,6 +1244,7 @@ public class TexturePickerScreen extends class_437 {
         DrawHelper.drawText(ctx, field_22793, "TEXTURE BUILDER",
             PAD + 34, (HEADER - 9) / 2, Ui.COL_ACCENT, false);
         Ui.drawSlothLogo(ctx, PAD, (HEADER - 16) / 2, phase);
+        DrawHelper.flushDraw(ctx);
 
         long done = selections.values().stream().filter(v -> v != null && v >= 0).count();
         String info = done + "/" + SLOTS.length + " slots";
@@ -1258,6 +1259,7 @@ public class TexturePickerScreen extends class_437 {
         DrawHelper.drawText(ctx, field_22793, categoryLabel(activeCategory), PAD, top + 6, Ui.COL_MUTED, false);
 
         List<Integer> visible = visibleSlotIndices();
+        DrawHelper.flushDraw(ctx);
         ctx.method_44379(0, top + 18, LEFT_W, bot);
         int y = top + 18 - (int) itemScroll;
         for (int i : visible) {
@@ -1293,7 +1295,9 @@ public class TexturePickerScreen extends class_437 {
             ctx.method_25294(PAD, y + ITEM_H - 1, LEFT_W - PAD, y + ITEM_H, col(Ui.COL_BORDER & 0xFFFFFF, 80));
             y += ITEM_H;
         }
+        DrawHelper.flushDraw(ctx);
         ctx.method_44380();
+        DrawHelper.flushDraw(ctx);
 
         int listTop = top + 18, listH = bot - listTop;
         int totalH = visible.size() * ITEM_H;

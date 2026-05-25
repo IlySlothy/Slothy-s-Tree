@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 
 /**
- * Legacy CIT hook for MC 1.21.2–1.21.3 ({@link net.minecraft.class_918#method_23182}).
+ * Legacy CIT hook for MC 1.21.2â€“1.21.3 ({@link net.minecraft.class_918#method_23182}).
  * Disabled automatically on 1.21.4+ via {@link com.slothyhub.cit.CitMixinPlugin}.
  */
 @Pseudo
@@ -38,3 +38,4 @@ public abstract class MixinCitLegacyItemRenderer {
         return CitLegacyItemRenderer.wrapModel(model, stack);
     }
 }
+

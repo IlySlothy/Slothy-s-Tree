@@ -17,7 +17,6 @@ public final class CitEngine {
     private CitEngine() {}
 
     public static void init() {
-        CitMixinPlugin.logPipelineMode();
         if (!SlothyConfig.isCitEnabled()) {
             SlothyHubMod.LOGGER.info("CIT engine disabled via config.");
             return;

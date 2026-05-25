@@ -1,7 +1,7 @@
 package com.slothyhub.mixin;
 
 import com.slothyhub.SlothyConfig;
-import com.slothyhub.cit.CitItemRenderer;
+import com.slothyhub.cit.LegacyCitItemRenderer;
 import net.minecraft.class_10444;
 import net.minecraft.class_4587;
 import net.minecraft.class_4597;
@@ -22,7 +22,7 @@ public abstract class MixinCitItemLayerPrepareDraw {
         CallbackInfo ci
     ) {
         if (!SlothyConfig.isCitEnabled()) return;
-        CitItemRenderer.prepareLayerForDraw((class_10444.class_10446) (Object) this);
+        LegacyCitItemRenderer.prepareLayerForDraw((class_10444.class_10446) (Object) this);
     }
 
     @Inject(method = "method_65614", at = @At("RETURN"))
@@ -33,6 +33,7 @@ public abstract class MixinCitItemLayerPrepareDraw {
         int overlay,
         CallbackInfo ci
     ) {
-        CitItemRenderer.finishLayerDraw((class_10444.class_10446) (Object) this);
+        if (!SlothyConfig.isCitEnabled()) return;
+        LegacyCitItemRenderer.finishLayerDraw((class_10444.class_10446) (Object) this);
     }
 }

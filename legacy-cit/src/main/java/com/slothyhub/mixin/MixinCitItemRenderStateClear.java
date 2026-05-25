@@ -1,6 +1,6 @@
 package com.slothyhub.mixin;
 
-import com.slothyhub.cit.CitItemRenderer;
+import com.slothyhub.cit.LegacyCitItemRenderer;
 import net.minecraft.class_10444;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -13,6 +13,7 @@ public abstract class MixinCitItemRenderStateClear {
 
     @Inject(method = "method_65605", at = @At("HEAD"))
     private void slothyhub$clearCitOnReset(CallbackInfo ci) {
-        CitItemRenderer.clearRenderCache((class_10444) (Object) this);
+        LegacyCitItemRenderer.clearRenderCache((class_10444) (Object) this);
     }
 }
+

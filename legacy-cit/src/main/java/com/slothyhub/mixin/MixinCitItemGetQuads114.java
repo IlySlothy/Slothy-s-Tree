@@ -3,7 +3,7 @@ package com.slothyhub.mixin;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.slothyhub.SlothyConfig;
-import com.slothyhub.cit.CitItemRenderer;
+import com.slothyhub.cit.LegacyCitItemRenderer;
 import net.minecraft.class_1087;
 import net.minecraft.class_2350;
 import net.minecraft.class_2680;
@@ -35,6 +35,6 @@ public abstract class MixinCitItemGetQuads114 {
     ) {
         List<class_777> quads = original.call(model, state, face, random);
         if (!SlothyConfig.isCitEnabled()) return quads;
-        return CitItemRenderer.remapQuadsForDraw(quads);
+        return LegacyCitItemRenderer.remapQuadsForDraw(quads);
     }
 }

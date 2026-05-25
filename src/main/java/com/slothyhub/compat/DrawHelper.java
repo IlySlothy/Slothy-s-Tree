@@ -239,7 +239,8 @@ public final class DrawHelper {
    }
 
    private static Method findGuiTexturedRenderLayerMethod() {
-      for (String name : new String[]{"getGuiTextured", "method_65214", "method_65213"}) {
+      // getGuiTextured is stable on 1.21.4; intermediary names vary on 1.21.8.
+      for (String name : new String[]{"getGuiTextured", "method_65214", "method_65213", "method_23576"}) {
          try {
             Method exact = class_1921.class.getMethod(name, class_2960.class);
             if (Modifier.isStatic(exact.getModifiers()) && class_1921.class.isAssignableFrom(exact.getReturnType())) {
@@ -506,6 +507,63 @@ public final class DrawHelper {
       }
    }
 
+   /** True on MC 1.21.4–1.21.7 where fill/texture/text must be flushed between draw phases. */
+   public static boolean isLegacyGui() {
+      return LEGACY_GUI_FLUSH;
+   }
+
+   public static void fillRect(class_332 ctx, int x1, int y1, int x2, int y2, int color) {
+      if (LEGACY_GUI_FLUSH) flushDraw(ctx);
+      ctx.method_25294(x1, y1, x2, y2, color);
+      if (LEGACY_GUI_FLUSH) flushDraw(ctx);
+   }
+
+   public static void fillGradient(class_332 ctx, int x1, int y1, int x2, int y2, int colorStart, int colorEnd) {
+      if (LEGACY_GUI_FLUSH) flushDraw(ctx);
+      ctx.method_25296(x1, y1, x2, y2, colorStart, colorEnd);
+      if (LEGACY_GUI_FLUSH) flushDraw(ctx);
+   }
+
+   private static boolean invokeGridBlit(
+      class_332 ctx,
+      class_2960 id,
+      int x,
+      int y,
+      float u,
+      float v,
+      int width,
+      int height,
+      int texW,
+      int texH
+   ) {
+      if (DRAW_TEXTURE_METHOD == null || DRAW_TEXTURE_FIRST_ARG == null) return false;
+      try {
+         int pc = DRAW_TEXTURE_METHOD.getParameterCount();
+         if (pc == 10) {
+            DRAW_TEXTURE_METHOD.invoke(ctx, DRAW_TEXTURE_FIRST_ARG, id, x, y, u, v, width, height, texW, texH);
+         } else if (pc == 11) {
+            DRAW_TEXTURE_METHOD.invoke(ctx, DRAW_TEXTURE_FIRST_ARG, id, x, y, u, v, width, height, texW, texH, -1);
+         } else if (pc == 12) {
+            if (LEGACY_GUI_FLUSH) {
+               DRAW_TEXTURE_METHOD.invoke(ctx, DRAW_TEXTURE_FIRST_ARG, id, x, y, u, v, width, height, width, height, texW, texH);
+            } else {
+               DRAW_TEXTURE_METHOD.invoke(ctx, DRAW_TEXTURE_FIRST_ARG, id, x, y, u, v, width, height, texW, texH, texW, texH);
+            }
+         } else if (pc == 13) {
+            if (LEGACY_GUI_FLUSH) {
+               DRAW_TEXTURE_METHOD.invoke(ctx, DRAW_TEXTURE_FIRST_ARG, id, x, y, u, v, width, height, width, height, texW, texH, -1);
+            } else {
+               DRAW_TEXTURE_METHOD.invoke(ctx, DRAW_TEXTURE_FIRST_ARG, id, x, y, u, v, width, height, texW, texH, texW, texH, -1);
+            }
+         } else {
+            return false;
+         }
+         return true;
+      } catch (ReflectiveOperationException ignored) {
+         return false;
+      }
+   }
+
    private static Object[] resolveNativeTextureCtor() {
       for (Constructor<?> c : class_1043.class.getDeclaredConstructors()) {
          Class<?>[] p = c.getParameterTypes();
@@ -640,8 +698,24 @@ public final class DrawHelper {
       if (source != null) {
          class_1058 sprite = createFullSprite(id, source);
          if (sprite != null) {
+            bindSpriteGpu(sprite, tex);
             GUI_SPRITES.put(id, sprite);
          }
+      }
+   }
+
+   private static void bindSpriteGpu(class_1058 sprite, class_1043 tex) {
+      if (sprite == null || tex == null) return;
+      try {
+         Object gpu = tex.method_68004();
+         if (gpu == null) return;
+         for (Method m : class_1058.class.getMethods()) {
+            if (m.getParameterCount() != 1) continue;
+            if (!m.getParameterTypes()[0].isInstance(gpu)) continue;
+            m.invoke(sprite, gpu);
+            return;
+         }
+      } catch (Exception ignored) {
       }
    }
 
@@ -654,6 +728,12 @@ public final class DrawHelper {
          flushDraw(ctx);
       }
 
+      // 1.21.8+: blit by registered texture id (reliable for pack/icon thumbnails).
+      if (!LEGACY_GUI_FLUSH && invokeGridBlit(ctx, id, x, y, u, v, width, height, tw, th)) {
+         flushDraw(ctx);
+         return;
+      }
+
       class_1058 sprite = GUI_SPRITES.get(id);
       if (sprite != null && u == 0f && v == 0f) {
          try {
@@ -661,6 +741,14 @@ public final class DrawHelper {
             flushDraw(ctx);
             return;
          } catch (ReflectiveOperationException ignored) {
+         }
+      }
+
+      // 1.21.4–1.21.7: RenderLayer.getGuiTextured grid blit (same path PackHub uses on 1.21.4).
+      if (LEGACY_GUI_FLUSH && DRAW_TEXTURE_FIRST_ARG instanceof Function) {
+         if (invokeGridBlit(ctx, id, x, y, u, v, width, height, tw, th)) {
+            flushDraw(ctx);
+            return;
          }
       }
 
@@ -673,20 +761,7 @@ public final class DrawHelper {
          return;
       }
 
-      if (DRAW_TEXTURE_METHOD != null && DRAW_TEXTURE_FIRST_ARG != null) {
-         try {
-            int pc = DRAW_TEXTURE_METHOD.getParameterCount();
-            if (pc == 10) {
-               DRAW_TEXTURE_METHOD.invoke(ctx, DRAW_TEXTURE_FIRST_ARG, id, x, y, u, v, width, height, tw, th);
-            } else if (pc == 11) {
-               DRAW_TEXTURE_METHOD.invoke(ctx, DRAW_TEXTURE_FIRST_ARG, id, x, y, u, v, width, height, tw, th, -1);
-            } else if (pc == 12) {
-               DRAW_TEXTURE_METHOD.invoke(ctx, DRAW_TEXTURE_FIRST_ARG, id, x, y, u, v, width, height, tw, th, tw, th);
-            } else if (pc == 13) {
-               DRAW_TEXTURE_METHOD.invoke(ctx, DRAW_TEXTURE_FIRST_ARG, id, x, y, u, v, width, height, tw, th, tw, th, -1);
-            }
-         } catch (ReflectiveOperationException ignored) {
-         }
+      if (invokeGridBlit(ctx, id, x, y, u, v, width, height, tw, th)) {
          flushDraw(ctx);
       }
    }

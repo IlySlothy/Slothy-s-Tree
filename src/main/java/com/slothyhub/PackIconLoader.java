@@ -1,5 +1,6 @@
 package com.slothyhub;
 
+import com.slothyhub.cit.TextureAnimationUtil;
 import com.slothyhub.compat.DrawHelper;
 import com.slothyhub.compat.Identifiers;
 import net.minecraft.class_1011;
@@ -43,7 +44,7 @@ public final class PackIconLoader {
                 return;
             }
             try (InputStream in = conn.getInputStream()) {
-                registerImage(pack.getId(), in.readAllBytes(), cb);
+                registerImage(pack.getId(), in.readAllBytes(), null, cb);
             }
         } catch (Exception e) {
             if (allowArchiveFallback) loadFromPackArchive(pack, cb);
@@ -90,30 +91,34 @@ public final class PackIconLoader {
         try {
             Path packPng = folder.resolve("pack.png");
             if (Files.isRegularFile(packPng)) {
-                registerImage(packId, Files.readAllBytes(packPng), cb);
+                registerImage(packId, Files.readAllBytes(packPng), null, cb);
                 return;
             }
-            byte[] best = findFallbackPngInFolder(folder);
-            if (best != null) registerImage(packId, best, cb);
+            PngCandidate best = findFallbackPngInFolder(folder);
+            if (best != null) registerImage(packId, best.png(), best.mcmeta(), cb);
             else cb.onFailed(packId);
         } catch (Exception e) {
             cb.onFailed(packId);
         }
     }
 
-    private static byte[] findFallbackPngInFolder(Path root) throws Exception {
-        byte[] best = null;
+    private static PngCandidate findFallbackPngInFolder(Path root) throws Exception {
+        PngCandidate cit = null;
+        PngCandidate best = null;
         try (var walk = Files.walk(root)) {
             for (Path p : walk.filter(f -> f.toString().toLowerCase(Locale.ROOT).endsWith(".png")).toList()) {
                 String name = root.relativize(p).toString().replace('\\', '/').toLowerCase(Locale.ROOT);
-                if (name.contains("/cit/") && (name.contains("sword") || name.contains("warden") || name.contains("perfect"))) {
-                    return Files.readAllBytes(p);
+                byte[] png = Files.readAllBytes(p);
+                byte[] mcmeta = readSiblingMcmeta(p);
+                PngCandidate cand = new PngCandidate(png, mcmeta, name);
+                if (isCitPreview(name)) {
+                    if (cit == null || citScore(name) > citScore(cit.name())) cit = cand.withName(name);
+                } else if (best == null && name.contains("textures/") && !name.contains("particle")) {
+                    best = cand;
                 }
-                if (best == null && name.contains("textures/") && !name.contains("particle"))
-                    best = Files.readAllBytes(p);
             }
         }
-        return best;
+        return cit != null ? cit : best;
     }
 
     private static void tryLoadFromZip(String url, String packId, IconCallback cb) {
@@ -135,46 +140,101 @@ public final class PackIconLoader {
         return name.equals("pack.png") || name.endsWith("/pack.png");
     }
 
+    private static boolean isCitPreview(String name) {
+        if (!name.endsWith(".png") || name.contains(".mcmeta")) return false;
+        if (!name.contains("/cit/") && !name.contains("optifine/cit")) return false;
+        return name.contains("sword") || name.contains("warden") || name.contains("perfect")
+            || name.contains("pro_sword") || name.contains("mythic") || name.contains("noob")
+            || name.contains("good_sword") || name.contains("summer") || name.contains("fallen");
+    }
+
+    private static int citScore(String name) {
+        int score = 0;
+        if (name.contains("netherite")) score += 8;
+        if (name.contains("warden")) score += 6;
+        if (name.contains("perfect")) score += 5;
+        if (name.contains("pro_sword") || name.contains("/pro/")) score += 4;
+        if (name.contains("sword")) score += 3;
+        if (name.contains("optifine/cit")) score += 2;
+        return score;
+    }
+
     private static void extractBestPng(ZipInputStream zin, String packId, IconCallback cb) throws Exception {
-        ZipEntry e;
         byte[] packPng = null;
-        byte[] bestData = null;
+        PngCandidate bestCit = null;
+        PngCandidate bestTex = null;
+        java.util.Map<String, byte[]> mcmetaByPng = new java.util.HashMap<>();
+
+        ZipEntry e;
         while ((e = zin.getNextEntry()) != null) {
             if (e.isDirectory()) continue;
             String name = e.getName().replace('\\', '/').toLowerCase(Locale.ROOT);
+            if (name.endsWith(".png.mcmeta")) {
+                String pngKey = name.substring(0, name.length() - ".mcmeta".length());
+                mcmetaByPng.put(pngKey, zin.readAllBytes());
+                zin.closeEntry();
+                continue;
+            }
             if (!name.endsWith(".png")) continue;
+
+            byte[] png = zin.readAllBytes();
             if (isPackIcon(name)) {
-                packPng = zin.readAllBytes();
+                packPng = png;
                 break;
             }
-            if (name.contains("/cit/") && (name.contains("sword") || name.contains("warden") || name.contains("perfect"))) {
-                registerImage(packId, zin.readAllBytes(), cb);
-                return;
+            PngCandidate cand = new PngCandidate(png, mcmetaByPng.get(name), name);
+            if (isCitPreview(name)) {
+                if (bestCit == null || citScore(name) > citScore(bestCit.name())) bestCit = cand;
+            } else if (bestTex == null && name.contains("textures/") && !name.contains("particle")) {
+                bestTex = cand;
             }
-            if (bestData == null && name.contains("textures/") && !name.contains("particle"))
-                bestData = zin.readAllBytes();
             zin.closeEntry();
         }
-        if (packPng != null) registerImage(packId, packPng, cb);
-        else if (bestData != null) registerImage(packId, bestData, cb);
-        else cb.onFailed(packId);
+
+        if (packPng != null) {
+            registerImage(packId, packPng, null, cb);
+        } else if (bestCit != null) {
+            registerImage(packId, bestCit.png(), bestCit.mcmeta(), cb);
+        } else if (bestTex != null) {
+            registerImage(packId, bestTex.png(), bestTex.mcmeta(), cb);
+        } else {
+            cb.onFailed(packId);
+        }
     }
 
-    private static void registerImage(String packId, byte[] png, IconCallback cb) {
+    private static byte[] readSiblingMcmeta(Path png) {
+        Path meta = Path.of(png.toString() + ".mcmeta");
+        if (!Files.isRegularFile(meta)) return null;
+        try {
+            return Files.readAllBytes(meta);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static void registerImage(String packId, byte[] png, byte[] mcmeta, IconCallback cb) {
         class_310 mc = class_310.method_1551();
         mc.execute(() -> {
             try {
                 class_1011 img = class_1011.method_4309(new ByteArrayInputStream(png));
+                img = TextureAnimationUtil.firstFrameFromImage(img, mcmeta);
+                if (img == null) { cb.onFailed(packId); return; }
+                int texW = img.method_4307();
+                int texH = img.method_4323();
                 String safe = packId.replaceAll("[^a-zA-Z0-9_\\-]", "_");
                 class_1043 tex = DrawHelper.createNativeTexture("slothyhub_packicon_" + safe, img);
                 if (tex == null) { cb.onFailed(packId); return; }
                 class_2960 id = Identifiers.of("slothyhub", "packicon/" + safe);
                 DrawHelper.registerDynamicTexture(id, tex, img);
-                cb.onLoaded(packId, id, img.method_4307(), img.method_4323());
+                cb.onLoaded(packId, id, texW, texH);
             } catch (Exception e) {
                 cb.onFailed(packId);
             }
         });
+    }
+
+    private record PngCandidate(byte[] png, byte[] mcmeta, String name) {
+        PngCandidate withName(String n) { return new PngCandidate(png, mcmeta, n); }
     }
 
     public interface IconCallback {

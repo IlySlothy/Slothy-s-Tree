@@ -234,6 +234,7 @@ public abstract class SlothyHubScreenBase extends class_437 {
         DrawHelper.drawText(ctx, field_22793, logo, logoX, logoY, Ui.COL_ACCENT, false);
         float phase = (float)(System.currentTimeMillis() % 4000L) / 4000f;
         Ui.drawSlothLogo(ctx, PAD, (HEADER - 16) / 2, phase);
+        DrawHelper.flushDraw(ctx);
         int afterLogo = logoX + field_22793.method_1727(logo) + 12;
         // thin divider
         ctx.method_25294(afterLogo, 12, afterLogo + 1, HEADER - 12, Ui.COL_BORDER);
@@ -484,6 +485,7 @@ public abstract class SlothyHubScreenBase extends class_437 {
         int cardW = Math.min(field_22789 - PAD * 2, 860);
         int cardX = (field_22789 - cardW) / 2;
 
+        DrawHelper.flushDraw(ctx);
         ctx.method_44379(0, top, field_22789, bot);
 
         if (loading)  { drawSkeleton(ctx, cardX, top, cardW); ctx.method_44380(); return; }
@@ -514,7 +516,9 @@ public abstract class SlothyHubScreenBase extends class_437 {
             col(Ui.COL_BG & 0xFFFFFF, 255), col(Ui.COL_BG & 0xFFFFFF, 0));
         ctx.method_25296(cardX, bot - 14, cardX + cardW, bot,
             col(Ui.COL_BG & 0xFFFFFF, 0),   col(Ui.COL_BG & 0xFFFFFF, 255));
+        DrawHelper.flushDraw(ctx);
         ctx.method_44380();
+        DrawHelper.flushDraw(ctx);
 
         // Scrollbar
         int totalH = visible.size() * CARD_H;
@@ -603,6 +607,7 @@ public abstract class SlothyHubScreenBase extends class_437 {
             float fa = Math.min(1f, thumbFadeIn.getOrDefault(pack.getId(), 0f) + delta * 0.12f);
             thumbFadeIn.put(pack.getId(), fa);
             DrawHelper.drawTexture(ctx, thumb.id(), tX, tY, 0f, 0f, THUMB, THUMB, thumb.width(), thumb.height());
+            DrawHelper.flushDraw(ctx);
         } else {
             Ui.drawPawPrint(ctx, tX + THUMB / 2, tY + THUMB / 2, col(Ui.COL_ACCENT & 0xFFFFFF, 40), 0.7f);
             float phase = (float)(System.currentTimeMillis() % 2400L) / 2400f;
@@ -793,8 +798,10 @@ public abstract class SlothyHubScreenBase extends class_437 {
         ctx.method_25294(bx - 4, by - 3, bx - 3, by + h + 4, Ui.COL_BORDER);
         ctx.method_25294(bx + w + 3, by - 3, bx + w + 4, by + h + 4, Ui.COL_BORDER);
         ctx.method_25294(bx - 4, by + h + 3, bx + w + 4, by + h + 4, Ui.COL_BORDER);
-        if (thumb != null) DrawHelper.drawTexture(ctx, thumb.id(), bx, by, 0f, 0f, w, h, thumb.width(), thumb.height());
-        else ctx.method_25294(bx, by, bx + w, by + h, Ui.COL_SURFACE);
+        if (thumb != null) {
+            DrawHelper.drawTexture(ctx, thumb.id(), bx, by, 0f, 0f, w, h, thumb.width(), thumb.height());
+            DrawHelper.flushDraw(ctx);
+        } else ctx.method_25294(bx, by, bx + w, by + h, Ui.COL_SURFACE);
         int ta = (int)(255f * Ui.easeOutCubic(previewT));
         if (ta >= 8) {
             String title = previewPack.getName();

@@ -1,13 +1,12 @@
 plugins {
     id 'fabric-loom' version "${loom_version}"
-    id 'maven-publish'
 }
 
-version = project.mod_version
+version = project.mod_version + '-legacy'
 group = project.maven_group
 
 base {
-    archivesName = 'slothyhub'
+    archivesName = 'slothyhub-legacy-cit'
 }
 
 repositories {
@@ -15,10 +14,8 @@ repositories {
 }
 
 loom {
-    accessWidenerPath = file("src/main/resources/slothyhub.accesswidener")
-
     mods {
-        slothyhub {
+        slothyhub_legacy_cit {
             sourceSet sourceSets.main
         }
     }
@@ -32,13 +29,11 @@ dependencies {
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
     modImplementation "io.github.llamalad7:mixinextras-fabric:0.4.1"
-
-    implementation "com.github.junrar:junrar:7.5.10"
+    compileOnly project(':')
 }
 
 processResources {
     inputs.property 'version', project.version
-
     filesMatching('fabric.mod.json') {
         expand 'version': project.version
     }
@@ -49,7 +44,6 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 java {
-    withSourcesJar()
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
     toolchain {
@@ -59,9 +53,4 @@ java {
 
 jar {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-}
-
-// Legacy CIT companion jar for MC 1.20–1.21.7 (not needed on 1.21.8).
-tasks.register('buildAll') {
-    dependsOn tasks.named('build'), project(':legacy-cit').tasks.named('build')
 }

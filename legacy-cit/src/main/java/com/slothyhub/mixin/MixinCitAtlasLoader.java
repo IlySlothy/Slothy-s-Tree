@@ -1,5 +1,6 @@
 package com.slothyhub.mixin;
 
+import com.slothyhub.SlothyConfig;
 import com.slothyhub.cit.CitAtlasRoots;
 import net.minecraft.class_2960;
 import net.minecraft.class_3298;
@@ -19,7 +20,7 @@ import java.util.Map;
 
 /**
  * Registers CIT PNGs into the blocks atlas so optifine/cit textures resolve as sprites.
- * Adapted from CIT Resewn (MIT) — Bittorn/CITResewn-1.21.4 AtlasLoaderMixin.
+ * Adapted from CIT Resewn (MIT) â€” Bittorn/CITResewn-1.21.4 AtlasLoaderMixin.
  */
 @Mixin(class_7947.class)
 public abstract class MixinCitAtlasLoader {
@@ -32,6 +33,9 @@ public abstract class MixinCitAtlasLoader {
         class_2960 id,
         CallbackInfoReturnable<class_7947> cir
     ) {
+        if (!SlothyConfig.isCitEnabled()) {
+            return;
+        }
         if (!"minecraft".equals(id.method_12836()) || !"blocks".equals(id.method_12832())) {
             return;
         }

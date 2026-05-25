@@ -11,41 +11,24 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Gates CIT mixins by MC version. Atlas injection is always safe; draw hooks are version-specific.
+ * Main SlothyHub jar: CIT render mixins for MC 1.21.8 only.
+ * Older versions use the separate {@code slothyhub-legacy-cit} companion mod.
+ *
+ * Must not load any Minecraft classes here — doing so breaks other mods' mixins
+ * (e.g. AppleSkin ItemStackMixin) and Essential preLaunch on Feather.
  */
 public final class CitMixinPlugin implements IMixinConfigPlugin {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("slothyhub-cit");
 
-    private static Boolean modernPipeline;
-    private static Boolean legacyPipeline;
-
-    public static boolean isModernPipeline() {
-        if (modernPipeline == null) {
-            modernPipeline = McVersion.atLeast("1.21.4");
-        }
-        return modernPipeline;
-    }
-
-    public static boolean isLegacyPipeline() {
-        if (legacyPipeline == null) {
-            legacyPipeline = !isModernPipeline();
-        }
-        return legacyPipeline;
-    }
-
-    static void logPipelineMode() {
-        if (McVersion.below("1.21.4")) {
-            LOGGER.info("CIT pipeline: legacy model wrap + atlas PNGs (MC {})", McVersion.current());
-        } else if (McVersion.atLeast("1.21.8")) {
-            LOGGER.info("CIT pipeline: render-state + layer sprite (MC {})", McVersion.current());
-        } else {
-            LOGGER.info("CIT pipeline: render-state + atlas PNGs (MC {}, baked-model CIT only)", McVersion.current());
-        }
-    }
-
     @Override
-    public void onLoad(String mixinPackage) {}
+    public void onLoad(String mixinPackage) {
+        if (McVersion.atLeast("1.21.8")) {
+            LOGGER.info("CIT render pipeline: 1.21.8 (main jar, MC {})", McVersion.current());
+        } else {
+            LOGGER.info("CIT render pipeline: install slothyhub-legacy-cit for MC {}", McVersion.current());
+        }
+    }
 
     @Override
     public String getRefMapperConfig() {
@@ -54,39 +37,12 @@ public final class CitMixinPlugin implements IMixinConfigPlugin {
 
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
-        if (mixinClassName.endsWith("MixinCitAtlasLoader")
-            || mixinClassName.endsWith("MixinCitAtlasPreparation")
-            || mixinClassName.endsWith("MixinCitResourceFinder")) {
-            return true;
-        }
-
         if (mixinClassName.endsWith("MixinCitLegacyItemRenderer")) {
-            return McVersion.below("1.21.4");
-        }
-
-        if (mixinClassName.endsWith("MixinCitItemRenderState")
-            || mixinClassName.endsWith("MixinCitItemRenderStateClear")
-            || mixinClassName.endsWith("MixinCitLayerData")
-            || mixinClassName.endsWith("MixinCitItemLayerPrepareDraw")) {
-            return McVersion.atLeast("1.21.4");
-        }
-
-        if (mixinClassName.endsWith("MixinCitItemDraw118")) {
-            return McVersion.atLeast("1.21.8");
-        }
-
-        if (mixinClassName.endsWith("MixinCitItemGetQuads114")) {
-            return McVersion.atLeast("1.21.4") && McVersion.below("1.21.8");
-        }
-
-        // Broken or experimental — keep disabled
-        if (mixinClassName.contains("MixinCitItemRenderStateApply")
-            || mixinClassName.contains("MixinCitItemModelBake")
-            || mixinClassName.contains("MixinCitItemRendererModern")
-            || mixinClassName.contains("MixinCitItemRenderQuads")) {
             return false;
         }
-
+        if (mixinClassName.contains("MixinCitItem")) {
+            return McVersion.atLeast("1.21.8");
+        }
         return true;
     }
 

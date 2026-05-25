@@ -1,19 +1,13 @@
 {
   "required": true,
   "package": "com.slothyhub.mixin",
-  "compatibilityLevel": "JAVA_17",
+  "compatibilityLevel": "JAVA_21",
   "plugin": "com.slothyhub.cit.CitMixinPlugin",
   "client": [
-    "MixinCitAtlasLoader",
-    "MixinCitAtlasPreparation",
-    "MixinCitResourceFinder",
-    "MixinCitLegacyItemRenderer",
     "MixinCitItemRenderState",
     "MixinCitItemRenderStateClear",
-    "MixinCitLayerData",
-    "MixinCitItemLayerPrepareDraw",
-    "MixinCitItemGetQuads114",
-    "MixinCitItemDraw118"
+    "MixinCitItemModelBake",
+    "MixinCitItemLayerDraw"
   ],
   "injectors": {
     "defaultRequire": 0

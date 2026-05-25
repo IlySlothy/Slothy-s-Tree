@@ -3,6 +3,8 @@ package com.slothyhub;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
+import com.slothyhub.builder.ResourceScanHelper;
+import com.slothyhub.cit.CitEngine;
 import com.slothyhub.cit.CitRuleSet;
 import com.slothyhub.cit.CitVirtualTextures;
 import java.io.IOException;
@@ -160,6 +162,8 @@ public class SlothyConfig {
         if (!v) {
             CitRuleSet.setActive(new CitRuleSet(List.of()));
             CitVirtualTextures.clear();
+        } else {
+            CitEngine.reloadFromManager(ResourceScanHelper.resourceManager());
         }
     }
     public static void setShowLocalPacks(boolean v) { showLocalPacks = v; save(); }

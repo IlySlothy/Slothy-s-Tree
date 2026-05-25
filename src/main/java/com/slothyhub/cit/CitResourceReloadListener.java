@@ -77,7 +77,7 @@ public final class CitResourceReloadListener implements SimpleSynchronousResourc
             }
         }
 
-        CitRuleSet.setActive(new CitRuleSet(CitRuleSet.dedupe(rules)));
+        CitRuleSet.setActive(new CitRuleSet(rules));
         SlothyHubMod.LOGGER.info("CIT: scanned {} properties files, loaded {} rules.", scanned, rules.size());
         for (CitRule r : rules) {
             SlothyHubMod.LOGGER.info("CIT: rule {} items={} name='{}' texture={}",

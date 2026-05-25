@@ -1,5 +1,6 @@
 package com.slothyhub.mixin;
 
+import com.slothyhub.SlothyConfig;
 import net.minecraft.class_2960;
 import net.minecraft.class_7654;
 import org.spongepowered.asm.mixin.Final;
@@ -11,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * Keeps absolute texture identifiers for CIT PNG paths.
- * Adapted from CIT Resewn (MIT) — Bittorn/CITResewn-1.21.4 ResourceFinderMixin.
+ * Adapted from CIT Resewn (MIT) â€” Bittorn/CITResewn-1.21.4 ResourceFinderMixin.
  */
 @Mixin(class_7654.class)
 public abstract class MixinCitResourceFinder {
@@ -20,6 +21,9 @@ public abstract class MixinCitResourceFinder {
 
     @Inject(method = "method_45112", cancellable = true, at = @At("HEAD"))
     private void slothyhub$keepAbsolutePngPath(class_2960 id, CallbackInfoReturnable<class_2960> cir) {
+        if (!SlothyConfig.isCitEnabled()) {
+            return;
+        }
         if (id.method_12832().endsWith(".png") && ".png".equals(field_39967)) {
             cir.setReturnValue(id);
         }

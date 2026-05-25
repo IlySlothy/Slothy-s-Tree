@@ -24,4 +24,11 @@ jdk/
 
 # Local decompiled MC dumps (debug only)
 cit_javap.txt
+cit10442*.txt
+citlayer214.txt
+drawcontext214.txt
+itemrenderer214.txt
 net_minecraft_class_*.java
+.cit-resewn-fork/
+.cit-resewn-main/
+scan-atlas.gradle
