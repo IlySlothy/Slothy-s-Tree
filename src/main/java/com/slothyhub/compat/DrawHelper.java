@@ -113,9 +113,9 @@ public final class DrawHelper {
 
    public static void bindSpriteGpu(class_1058 sprite, class_1043 tex) {
       if (sprite == null || tex == null) return;
+      Object gpu = invokeGetGpuTexture(tex);
+      if (gpu == null) return;
       try {
-         Object gpu = tex.method_68004();
-         if (gpu == null) return;
          for (Method m : class_1058.class.getMethods()) {
             if (m.getParameterCount() == 1 && m.getParameterTypes()[0].isInstance(gpu)) {
                m.invoke(sprite, gpu);
@@ -130,6 +130,41 @@ public final class DrawHelper {
          }
       } catch (Exception ignored) {}
    }
+
+   /** Reflection-safe lookup for {@code NativeImageBackedTexture.getGpuTexture()} (added in 1.21.8).
+    *  Returns {@code null} on MC versions that don't expose a GpuTexture accessor instead of throwing. */
+   private static Object invokeGetGpuTexture(class_1043 tex) {
+      Method m = GET_GPU_TEXTURE;
+      if (m == null) return null;
+      try {
+         return m.invoke(tex);
+      } catch (ReflectiveOperationException e) {
+         return null;
+      }
+   }
+
+   private static Method resolveGetGpuTexture() {
+      for (String name : new String[]{"method_68004", "getGpuTexture"}) {
+         try {
+            Method m = class_1043.class.getMethod(name);
+            if (m.getParameterCount() == 0 && !m.getReturnType().isPrimitive()) {
+               m.setAccessible(true);
+               return m;
+            }
+         } catch (ReflectiveOperationException ignored) {}
+      }
+      for (Method m : class_1043.class.getMethods()) {
+         if (m.getParameterCount() != 0) continue;
+         String rt = m.getReturnType().getName();
+         if (rt.contains("GpuTexture")) {
+            m.setAccessible(true);
+            return m;
+         }
+      }
+      return null;
+   }
+
+   private static final Method GET_GPU_TEXTURE = resolveGetGpuTexture();
 
    @SuppressWarnings("unchecked")
    private static void resolveSpriteCtors() {

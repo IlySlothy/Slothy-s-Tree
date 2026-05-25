@@ -5,6 +5,7 @@ import com.slothyhub.SlothyHubMod;
 import com.slothyhub.builder.ResourceScanHelper;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.class_3264;
 import net.minecraft.class_3300;
 
@@ -15,6 +16,12 @@ import java.util.Locale;
 
 public final class CitEngine {
 
+    /** External CIT mods we yield to so we don't double-handle/override their work. */
+    private static final String[] EXTERNAL_CIT_MOD_IDS = {
+        "citresewn", "citresewn-defaults", "chime", "cit-resewn", "more_cit",
+        "moremcmeta_textures_plugin", "moremcmeta"
+    };
+
     private CitEngine() {}
 
     public static void init() {
@@ -22,10 +29,27 @@ public final class CitEngine {
             SlothyHubMod.LOGGER.info("CIT engine disabled via config.");
             return;
         }
+        // The 1.21.8-targeted jar uses GpuTexture APIs that don't exist on <1.21.4.
+        // If somebody force-installs it on an older MC, refuse to register the engine
+        // instead of crashing later inside the sprite rebuild.
+        if (!McVersion.atLeast("1.21.4")) {
+            SlothyHubMod.LOGGER.warn(
+                "CIT engine skipped: this build targets MC 1.21.4+ (current = {}). "
+                + "Use the slothyhub-1.0.2-mc1.20-1.21.8 jar on older versions.",
+                McVersion.current());
+            return;
+        }
         if (McVersion.atLeast("1.21.9")) {
             SlothyHubMod.LOGGER.info(
                 "CIT: install slothyhub-cit alongside Slothy's Tree for MC {} (main jar has no CIT on 1.21.9+)",
                 McVersion.current());
+            return;
+        }
+        String externalCit = detectExternalCitMod();
+        if (externalCit != null) {
+            SlothyHubMod.LOGGER.info(
+                "CIT engine skipped: '{}' is installed and will handle CIT rules. "
+                + "Slothy's Tree will not register a second handler.", externalCit);
             return;
         }
         try {
@@ -39,6 +63,15 @@ public final class CitEngine {
         } catch (Throwable e) {
             SlothyHubMod.LOGGER.warn("CIT engine could not register reload listener: {}", e.getMessage());
         }
+    }
+
+    /** Returns the id of an installed CIT-providing mod, or {@code null} if none are present. */
+    private static String detectExternalCitMod() {
+        FabricLoader loader = FabricLoader.getInstance();
+        for (String id : EXTERNAL_CIT_MOD_IDS) {
+            if (loader.isModLoaded(id)) return id;
+        }
+        return null;
     }
 
     public static void reloadFromManager(class_3300 manager) {
