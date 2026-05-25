@@ -1,5 +1,7 @@
 package com.slothyhub;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -69,6 +71,15 @@ public class Pack {
         return showcase_path != null && !showcase_path.isBlank() ? serverBase + showcase_path : "";
     }
 
+    /** Static GitHub Pages / CDN path: {base}/downloads/{filename} */
+    public String getStaticDownloadUrl(String serverBase) {
+        String fn = getPackFilename();
+        if (fn == null || fn.isBlank()) return "";
+        String encoded = URLEncoder.encode(fn, StandardCharsets.UTF_8).replace("+", "%20");
+        return serverBase + "/downloads/" + encoded;
+    }
+
+    /** Legacy API route — only works when a SlothyHub backend is running. */
     public String getDirectDownloadUrl(String serverBase) {
         return serverBase + "/api/packs/" + getId() + "/pack";
     }

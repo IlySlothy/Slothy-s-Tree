@@ -1,6 +1,7 @@
 package com.slothyhub;
 
 import com.slothyhub.compat.DrawHelper;
+import com.slothyhub.compat.InputCompat;
 import com.slothyhub.ui.Ui;
 import net.minecraft.class_2561;
 import net.minecraft.class_332;
@@ -24,6 +25,7 @@ public class KillEffectsScreen extends class_437 {
     private float[] hoverT = new float[EFFECTS.size()];
     private float[] effectCheckAnim = new float[EFFECTS.size()];
     private String selected;
+    private final InputCompat.Poller inputPoller = new InputCompat.Poller();
 
     public KillEffectsScreen(class_437 parent) {
         super(class_2561.method_43470("Kill Effects"));
@@ -34,6 +36,7 @@ public class KillEffectsScreen extends class_437 {
 
     @Override
     public void method_25394(class_332 ctx, int mx, int my, float delta) {
+        inputPoller.poll(mx, my, (x, y, btn) -> method_25402(x, y, btn), null);
         ctx.method_25294(0, 0, field_22789, field_22790, Ui.COL_BG);
         Ui.drawSubscreenHeader(ctx, field_22793, field_22789, "KILL EFFECTS  //  SLOTHYHUB", delta);
 
@@ -85,7 +88,7 @@ public class KillEffectsScreen extends class_437 {
         DrawHelper.drawText(ctx, field_22793, "SAVE & CLOSE", field_22789 / 2 - field_22793.method_1727("SAVE & CLOSE") / 2, field_22790 - 21, cfg, false);
     }
 
-    @Override
+
     public boolean method_25402(double mx, double my, int button) {
         if (button == 0) {
             int cardW = Math.min(field_22789 - 60, 420), cardX = (field_22789 - cardW) / 2, startY = 64;

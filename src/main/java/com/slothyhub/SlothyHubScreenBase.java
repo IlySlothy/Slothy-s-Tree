@@ -835,7 +835,7 @@ public abstract class SlothyHubScreenBase extends class_437 {
 
     // ── Input ─────────────────────────────────────────────────────────────
 
-    @Override
+
     public boolean method_25402(double mx, double my, int button) {
         if (previewPack != null && button == 0) { previewPack = null; return true; }
 
@@ -1051,7 +1051,10 @@ public abstract class SlothyHubScreenBase extends class_437 {
         localPacks = InstalledPackScanner.scan(catalogFilenames(PackCatalog.loadEmbedded()));
         if (!SlothyConfig.isConfigured()) {
             allPacks = new ArrayList<>(localPacks);
-            loading = false; return;
+            loading = false;
+            // Still render icons for locally-installed packs even without a server.
+            loadThumbs("");
+            return;
         }
         String srv = SlothyConfig.getServerUrl();
         executor.submit(() -> {
@@ -1082,6 +1085,8 @@ public abstract class SlothyHubScreenBase extends class_437 {
                     List<Pack> embedded = PackCatalog.loadEmbedded();
                     localPacks = InstalledPackScanner.scan(catalogFilenames(embedded));
                     allPacks = mergeCatalog(embedded, localPacks);
+                    // Catalog fetch failed (offline / API down) — still load icons for what we have.
+                    loadThumbs(srv);
                 });
             }
         });

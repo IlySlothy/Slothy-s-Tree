@@ -1,6 +1,7 @@
 package com.slothyhub;
 
 import com.slothyhub.compat.DrawHelper;
+import com.slothyhub.compat.InputCompat;
 import com.slothyhub.ui.GuiTheme;
 import com.slothyhub.ui.Ui;
 import net.minecraft.class_2561;
@@ -38,6 +39,7 @@ public class GuiThemeScreen extends class_437 {
     private boolean draggingHue, draggingSv;
     private int hueX, hueY, hueW, hueH;
     private int svX, svY, svW, svH;
+    private final InputCompat.Poller inputPoller = new InputCompat.Poller();
 
     public GuiThemeScreen(class_437 parent) {
         super(class_2561.method_43470("GUI Theme"));
@@ -81,6 +83,7 @@ public class GuiThemeScreen extends class_437 {
 
     @Override
     public void method_25394(class_332 ctx, int mx, int my, float delta) {
+        inputPoller.poll(mx, my, (x, y, btn) -> method_25402(x, y, btn), null);
         int bg = Ui.COL_BG, panel = Ui.COL_PANEL, text = Ui.COL_TEXT, muted = Ui.COL_MUTED;
         int border = Ui.COL_BORDER, accent = Ui.COL_ACCENT, surface = Ui.COL_SURFACE;
 
@@ -321,7 +324,7 @@ public class GuiThemeScreen extends class_437 {
         return Math.max(lo, Math.min(hi, v));
     }
 
-    @Override
+
     public boolean method_25402(double mx, double my, int button) {
         if (button != 0) return false;
 

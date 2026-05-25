@@ -31,7 +31,8 @@ public final class CitResourceReloadListener implements SimpleSynchronousResourc
         reloadCit(manager);
     }
 
-    static void reloadCit(class_3300 manager) {
+    /** Parse CIT rules from resource packs (shared by main 1.21.8 and slothyhub-cit on 1.21.9+). */
+    public static void reloadCitProperties(class_3300 manager) {
         if (!SlothyConfig.isCitEnabled()) {
             CitRuleSet.setActive(new CitRuleSet(List.of()));
             CitVirtualTextures.clear();
@@ -52,10 +53,7 @@ public final class CitResourceReloadListener implements SimpleSynchronousResourc
                     scanned++;
                     class_2960 rid = entry.getKey();
                     try {
-                        InputStream in = ResourceScanHelper.openResource(entry.getValue());
-                        if (in == null) {
-                            in = ResourceScanHelper.openIdentifier(manager, rid);
-                        }
+                        InputStream in = ResourceScanHelper.openMapEntry(manager, rid, entry.getValue());
                         if (in == null) {
                             SlothyHubMod.LOGGER.warn("CIT: could not open {}", rid);
                             continue;
@@ -83,6 +81,11 @@ public final class CitResourceReloadListener implements SimpleSynchronousResourc
             SlothyHubMod.LOGGER.info("CIT: rule {} items={} name='{}' texture={}",
                 r.id, r.items, r.nameMatcher, r.texture);
         }
+    }
+
+    static void reloadCit(class_3300 manager) {
+        reloadCitProperties(manager);
+        if (!SlothyConfig.isCitEnabled() || manager == null) return;
         scheduleSpriteRebuild(manager);
     }
 

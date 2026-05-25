@@ -23,8 +23,10 @@ public final class CitMixinPlugin implements IMixinConfigPlugin {
 
     @Override
     public void onLoad(String mixinPackage) {
-        if (McVersion.atLeast("1.21.8")) {
-            LOGGER.info("CIT render pipeline: 1.21.8 (main jar, MC {})", McVersion.current());
+        if (McVersion.atLeast("1.21.8") && McVersion.below("1.21.9")) {
+            LOGGER.info("CIT render pipeline: main jar (MC {})", McVersion.current());
+        } else if (McVersion.atLeast("1.21.9")) {
+            LOGGER.info("CIT render pipeline: install slothyhub-cit for MC {}", McVersion.current());
         } else {
             LOGGER.info("CIT render pipeline: install slothyhub-legacy-cit for MC {}", McVersion.current());
         }
@@ -41,7 +43,8 @@ public final class CitMixinPlugin implements IMixinConfigPlugin {
             return false;
         }
         if (mixinClassName.contains("MixinCitItem")) {
-            return McVersion.atLeast("1.21.8");
+            // Render-state CIT pipeline is validated on 1.21.8; skip on 1.21.9+ (modern-cit companion).
+            return McVersion.atLeast("1.21.8") && McVersion.below("1.21.9");
         }
         return true;
     }

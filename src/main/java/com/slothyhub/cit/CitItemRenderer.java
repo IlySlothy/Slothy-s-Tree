@@ -1,6 +1,7 @@
 package com.slothyhub.cit;
 
 import com.slothyhub.SlothyHubMod;
+import com.slothyhub.compat.DrawHelper;
 import net.minecraft.class_10444;
 import net.minecraft.class_1921;
 import net.minecraft.class_1058;
@@ -372,8 +373,8 @@ public final class CitItemRenderer {
         if (layer == null || sprite == null) return;
         if (textureId != null) {
             try {
-                // Same layer type vanilla items use (entity_cutout), bound to our CIT texture.
-                layer.method_67992(class_1921.method_23576(textureId));
+                class_1921 renderLayer = DrawHelper.entityCutoutLayer(textureId);
+                if (renderLayer != null) layer.method_67992(renderLayer);
             } catch (Exception e) {
                 SlothyHubMod.LOGGER.debug("CIT: render layer bind failed for {}: {}", textureId, e.getMessage());
             }

@@ -1,0 +1,9 @@
+{
+  "required": true,
+  "package": "com.slothyhub.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}

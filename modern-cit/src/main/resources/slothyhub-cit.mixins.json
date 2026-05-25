@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "package": "com.slothyhub.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "plugin": "com.slothyhub.modern.ModernCitMixinPlugin",
+  "client": [
+    "MixinCitItemRenderState",
+    "MixinCitItemRenderStateDraw"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}

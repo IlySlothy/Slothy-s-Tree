@@ -15,3 +15,5 @@ plugins {
 
 rootProject.name = 'slothyhub'
 include 'legacy-cit'
+include 'modern-cit'
+include 'slothyhub-1.21.11'

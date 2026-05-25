@@ -48,8 +48,147 @@ public final class DrawHelper {
    private static final Method LEGACY_REGION_BLIT = resolveLegacyRegionBlit();
    private static final Method LEGACY_BLIT_SPRITE = resolveBlitSpriteMethod(true);
    private static final Method MODERN_BLIT_SPRITE = resolveBlitSpriteMethod(false);
+   private static final Method ENTITY_CUTOUT_LAYER = findGuiTexturedRenderLayerMethod();
+
+   private static Constructor<class_1058> SPRITE_CTOR_6;
+   private static Constructor<class_1058> SPRITE_CTOR_7;
+   private static boolean spriteCtorsResolved;
 
    private DrawHelper() {
+   }
+
+   /** Version-tolerant SpriteContents construction (1.21.4-1.21.11). */
+   public static class_7764 createSpriteContents(class_2960 id, class_1011 img) {
+      if (id == null || img == null) return null;
+      int w = Math.max(1, img.method_4307());
+      int h = Math.max(1, img.method_4323());
+      class_7771 dimensions = new class_7771(w, h);
+      if (McVersion.atLeast("1.21.9")) {
+         for (Constructor<?> ctor : class_7764.class.getDeclaredConstructors()) {
+            Class<?>[] p = ctor.getParameterTypes();
+            if (p.length == 3 && p[0] == class_2960.class && p[1] == class_7771.class && p[2] == class_1011.class) {
+               try {
+                  ctor.setAccessible(true);
+                  return (class_7764) ctor.newInstance(id, dimensions, img);
+               } catch (Exception ignored) {}
+            }
+         }
+      }
+      try {
+         return new class_7764(id, dimensions, img, class_7368.field_38688);
+      } catch (Throwable ignored) {}
+      for (Constructor<?> ctor : class_7764.class.getDeclaredConstructors()) {
+         Object[] args = matchSpriteContentsArgs(ctor.getParameterTypes(), id, img, dimensions);
+         if (args == null) continue;
+         try {
+            ctor.setAccessible(true);
+            return (class_7764) ctor.newInstance(args);
+         } catch (Exception ignored) {}
+      }
+      return null;
+   }
+
+   public static class_1058 createFullSprite(class_2960 id, class_1011 img) {
+      if (id == null || img == null) return null;
+      class_7764 contents = createSpriteContents(id, img);
+      if (contents == null) return null;
+      int w = Math.max(1, img.method_4307());
+      int h = Math.max(1, img.method_4323());
+      return createAtlasSprite(id, contents, w, h, 0, 0);
+   }
+
+   public static class_1058 createAtlasSprite(class_2960 id, class_7764 contents, int atlasW, int atlasH, int x, int y) {
+      if (id == null || contents == null) return null;
+      resolveSpriteCtors();
+      try {
+         if (SPRITE_CTOR_7 != null) {
+            return SPRITE_CTOR_7.newInstance(id, contents, atlasW, atlasH, x, y, 0);
+         }
+         if (SPRITE_CTOR_6 != null) {
+            return SPRITE_CTOR_6.newInstance(id, contents, atlasW, atlasH, x, y);
+         }
+      } catch (Exception ignored) {}
+      return null;
+   }
+
+   public static void bindSpriteGpu(class_1058 sprite, class_1043 tex) {
+      if (sprite == null || tex == null) return;
+      try {
+         Object gpu = tex.method_68004();
+         if (gpu == null) return;
+         for (Method m : class_1058.class.getMethods()) {
+            if (m.getParameterCount() == 1 && m.getParameterTypes()[0].isInstance(gpu)) {
+               m.invoke(sprite, gpu);
+               return;
+            }
+            if (m.getParameterCount() == 2
+               && m.getParameterTypes()[0].isInstance(gpu)
+               && m.getParameterTypes()[1] == int.class) {
+               m.invoke(sprite, gpu, 0);
+               return;
+            }
+         }
+      } catch (Exception ignored) {}
+   }
+
+   @SuppressWarnings("unchecked")
+   private static void resolveSpriteCtors() {
+      if (spriteCtorsResolved) return;
+      spriteCtorsResolved = true;
+      for (Constructor<?> ctor : class_1058.class.getDeclaredConstructors()) {
+         Class<?>[] p = ctor.getParameterTypes();
+         if (p.length == 7 && p[0] == class_2960.class && p[1] == class_7764.class
+            && p[2] == int.class && p[3] == int.class && p[4] == int.class
+            && p[5] == int.class && p[6] == int.class) {
+            ctor.setAccessible(true);
+            SPRITE_CTOR_7 = (Constructor<class_1058>) ctor;
+         } else if (p.length == 6 && p[0] == class_2960.class && p[1] == class_7764.class
+            && p[2] == int.class && p[3] == int.class && p[4] == int.class && p[5] == int.class) {
+            ctor.setAccessible(true);
+            SPRITE_CTOR_6 = (Constructor<class_1058>) ctor;
+         }
+      }
+      if (SPRITE_CTOR_7 == null) {
+         try {
+            SPRITE_CTOR_7 = class_1058.class.getDeclaredConstructor(
+               class_2960.class, class_7764.class, int.class, int.class, int.class, int.class, int.class);
+            SPRITE_CTOR_7.setAccessible(true);
+         } catch (NoSuchMethodException ignored) {}
+      }
+      if (SPRITE_CTOR_6 == null) {
+         try {
+            SPRITE_CTOR_6 = class_1058.class.getDeclaredConstructor(
+               class_2960.class, class_7764.class, int.class, int.class, int.class, int.class);
+            SPRITE_CTOR_6.setAccessible(true);
+         } catch (NoSuchMethodException ignored) {}
+      }
+   }
+
+   private static Object[] matchSpriteContentsArgs(Class<?>[] params, class_2960 id, class_1011 img,
+                                                   class_7771 dimensions) {
+      Object[] args = new Object[params.length];
+      for (int i = 0; i < params.length; i++) {
+         Class<?> p = params[i];
+         if (p == class_2960.class) args[i] = id;
+         else if (p == class_1011.class) args[i] = img;
+         else if (p == class_7771.class) args[i] = dimensions;
+         else if (p.isEnum()) {
+            Object[] constants = p.getEnumConstants();
+            args[i] = constants != null && constants.length > 0 ? constants[0] : null;
+         } else if (!p.isPrimitive()) args[i] = null;
+         else return null;
+      }
+      return args;
+   }
+
+   /** Entity/item cutout render layer for a dynamic texture id (1.21.8–1.21.11). */
+   public static class_1921 entityCutoutLayer(class_2960 textureId) {
+      if (ENTITY_CUTOUT_LAYER == null || textureId == null) return null;
+      try {
+         return (class_1921) ENTITY_CUTOUT_LAYER.invoke(null, textureId);
+      } catch (ReflectiveOperationException e) {
+         return null;
+      }
    }
 
    private static Function<class_2960, Object> resolveLegacyRenderLayer() {
@@ -105,21 +244,6 @@ public final class DrawHelper {
          }
       }
       return null;
-   }
-
-   private static class_1058 createFullSprite(class_2960 id, class_1011 img) {
-      if (id == null || img == null) return null;
-      try {
-         int w = Math.max(1, img.method_4307());
-         int h = Math.max(1, img.method_4323());
-         class_7764 contents = new class_7764(id, new class_7771(w, h), img, class_7368.field_38688);
-         var ctor = class_1058.class.getDeclaredConstructor(
-            class_2960.class, class_7764.class, int.class, int.class, int.class, int.class);
-         ctor.setAccessible(true);
-         return ctor.newInstance(id, contents, w, h, 0, 0);
-      } catch (Throwable ignored) {
-         return null;
-      }
    }
 
    private static void invokeLegacyRegionBlit(
@@ -701,21 +825,6 @@ public final class DrawHelper {
             bindSpriteGpu(sprite, tex);
             GUI_SPRITES.put(id, sprite);
          }
-      }
-   }
-
-   private static void bindSpriteGpu(class_1058 sprite, class_1043 tex) {
-      if (sprite == null || tex == null) return;
-      try {
-         Object gpu = tex.method_68004();
-         if (gpu == null) return;
-         for (Method m : class_1058.class.getMethods()) {
-            if (m.getParameterCount() != 1) continue;
-            if (!m.getParameterTypes()[0].isInstance(gpu)) continue;
-            m.invoke(sprite, gpu);
-            return;
-         }
-      } catch (Exception ignored) {
       }
    }
 

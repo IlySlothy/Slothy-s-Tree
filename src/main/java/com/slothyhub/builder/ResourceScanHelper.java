@@ -44,6 +44,9 @@ public final class ResourceScanHelper {
         if (resource instanceof java.util.Optional<?> opt) {
             return opt.isPresent() ? openResource(opt.get()) : null;
         }
+        if (resource instanceof java.util.List<?> list && !list.isEmpty()) {
+            return openResource(list.get(0));
+        }
         for (String name : new String[]{"method_14482", "open", "getInputStream"}) {
             try {
                 Method m = resource.getClass().getMethod(name);
@@ -60,6 +63,13 @@ public final class ResourceScanHelper {
             }
         }
         return null;
+    }
+
+    /** Opens a stream from a findResources map entry, falling back to the identifier. */
+    public static InputStream openMapEntry(class_3300 manager, class_2960 id, Object mapValue) {
+        InputStream in = openResource(mapValue);
+        if (in != null) return in;
+        return openIdentifier(manager, id);
     }
 
     public static InputStream openIdentifier(class_3300 manager, class_2960 id) {

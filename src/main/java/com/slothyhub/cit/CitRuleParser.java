@@ -117,14 +117,39 @@ public final class CitRuleParser {
             return name;
         }
 
+        // Step 1: collapse any exact repetition of a substring (e.g. "Noob SwordNoob Sword" → "Noob Sword").
+        // This runs even before the expected-name comparison so things like "FooFooFoo" → "Foo".
+        String collapsed = reduceExactRepetition(body);
+        if (collapsed != null && !collapsed.equals(body)) {
+            SlothyHubMod.LOGGER.warn("CIT: collapsed repeated name in {} ('{}' → '{}')",
+                rid, body, collapsed);
+            body = collapsed;
+        }
+
         String expected = expectedNameFromRule(rid, texture);
-        if (expected == null || expected.isBlank()) return name;
+        if (expected == null || expected.isBlank()) return prefix + body;
 
         String bodyLower = body.toLowerCase(Locale.ROOT);
         String expectedLower = expected.toLowerCase(Locale.ROOT);
 
         // Exact or clean match — keep as-is
         if (bodyLower.equals(expectedLower)) return prefix + expected;
+
+        // Step 2: if body is a doubled or N-times repeat of expected, just return expected.
+        if (isRepetitionOf(bodyLower, expectedLower)) {
+            SlothyHubMod.LOGGER.warn("CIT: repaired N-repeat name in {} ('{}' → '{}')",
+                rid, body, expected);
+            return prefix + expected;
+        }
+
+        // Valid compound names like "Good Boots" must not be truncated to filename "Boots".
+        // Require a separating space before the expected suffix so "NoobSwordNoob Sword" still falls through.
+        if (bodyLower.endsWith(" " + expectedLower) && body.length() <= expected.length() + 12) {
+            return prefix + body;
+        }
+        if (bodyLower.startsWith(expectedLower + " ") || bodyLower.contains(" " + expectedLower)) {
+            return prefix + body;
+        }
 
         // Corrupted concat (multiple sword names run together) — use filename-derived name
         if (countEmbeddedSwordNames(bodyLower) > 1) {
@@ -134,6 +159,10 @@ public final class CitRuleParser {
         }
 
         if (bodyLower.contains(expectedLower) && body.length() > expected.length() + 2) {
+            // Keep valid tiered names like "Good Boots" when filename only yields "Boots"
+            if (!bodyLower.equals(expectedLower) && bodyLower.endsWith(" " + expectedLower)) {
+                return prefix + body;
+            }
             SlothyHubMod.LOGGER.warn("CIT: repaired corrupted name in {} ('{}' → '{}')",
                 rid, body, expected);
             return prefix + expected;
@@ -146,7 +175,45 @@ public final class CitRuleParser {
             return prefix + expected;
         }
 
-        return name;
+        return prefix + body;
+    }
+
+    /**
+     * If {@code s} consists of an exact repetition of some prefix of length {@code k}
+     * (where 2 ≤ k ≤ len/2 and len is a multiple of k), return that prefix; otherwise
+     * return {@code s} unchanged.
+     *
+     * Examples:
+     *   "Noob SwordNoob Sword"            → "Noob Sword"
+     *   "Good SwordGood SwordGood Sword"  → "Good Sword"
+     *   "Pro SwordPro Sword"              → "Pro Sword"
+     *   "Hello"                           → "Hello"
+     */
+    static String reduceExactRepetition(String s) {
+        if (s == null) return null;
+        int len = s.length();
+        if (len < 4) return s;
+        for (int k = 1; k <= len / 2; k++) {
+            if (len % k != 0) continue;
+            String head = s.substring(0, k);
+            boolean repeats = true;
+            for (int i = k; i < len; i += k) {
+                if (!s.regionMatches(i, head, 0, k)) { repeats = false; break; }
+            }
+            if (repeats) return head;
+        }
+        return s;
+    }
+
+    /** Case-insensitive repetition check (body is some integer repeat of unit, k ≥ 1, repeat ≥ 2). */
+    private static boolean isRepetitionOf(String bodyLower, String unitLower) {
+        if (unitLower == null || unitLower.isEmpty()) return false;
+        if (bodyLower.length() < unitLower.length() * 2) return false;
+        if (bodyLower.length() % unitLower.length() != 0) return false;
+        for (int i = 0; i < bodyLower.length(); i += unitLower.length()) {
+            if (!bodyLower.regionMatches(i, unitLower, 0, unitLower.length())) return false;
+        }
+        return true;
     }
 
     private static boolean looksConcatenated(String body, String expected) {
@@ -171,8 +238,12 @@ public final class CitRuleParser {
     }
 
     private static String expectedNameFromRule(class_2960 rid, String texture) {
-        String fromFile = baseNameFromPath(rid.method_12832());
-        if (fromFile != null) return humanizeUnderscore(fromFile);
+        String path = rid.method_12832();
+        String armorPiece = expectedArmorPieceName(path);
+        if (armorPiece != null) return armorPiece;
+
+        String fromFile = baseNameFromPath(path);
+        if (fromFile != null && !isArmorSlotFile(fromFile)) return humanizeUnderscore(fromFile);
 
         if (texture != null && !texture.isBlank()) {
             String t = texture.replace('\\', '/');
@@ -183,11 +254,38 @@ public final class CitRuleParser {
         return null;
     }
 
+    private static boolean isArmorSlotFile(String baseName) {
+        if (baseName == null) return false;
+        String lower = baseName.toLowerCase(Locale.ROOT);
+        return lower.equals("boots") || lower.equals("helmet")
+            || lower.equals("chestplate") || lower.equals("leggings");
+    }
+
     private static String baseNameFromPath(String path) {
         if (path == null || !path.endsWith(".properties")) return null;
         int slash = path.lastIndexOf('/');
         String file = slash >= 0 ? path.substring(slash + 1) : path;
         return file.substring(0, file.length() - ".properties".length());
+    }
+
+    /** e.g. optifine/cit/good_armor/boots.properties → "Good Boots" */
+    private static String expectedArmorPieceName(String path) {
+        if (path == null) return null;
+        String lower = path.toLowerCase(Locale.ROOT);
+        String slot = armorSlotFromPath(lower);
+        if (slot == null) return null;
+        int slash = path.lastIndexOf('/');
+        if (slash <= 0) return humanizeUnderscore(slot);
+        String dir = path.substring(0, slash);
+        int prevSlash = dir.lastIndexOf('/');
+        String folder = prevSlash >= 0 ? dir.substring(prevSlash + 1) : dir;
+        String tier = folder;
+        if (tier.endsWith("_armor")) tier = tier.substring(0, tier.length() - "_armor".length());
+        else if (tier.endsWith("armor")) tier = tier.substring(0, Math.max(0, tier.length() - 5));
+        String tierName = humanizeUnderscore(tier);
+        String slotName = humanizeUnderscore(slot);
+        if (tierName == null || tierName.isBlank()) return slotName;
+        return tierName + " " + slotName;
     }
 
     private static String humanizeUnderscore(String raw) {

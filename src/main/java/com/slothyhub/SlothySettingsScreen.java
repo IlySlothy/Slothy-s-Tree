@@ -1,6 +1,7 @@
 package com.slothyhub;
 
 import com.slothyhub.compat.DrawHelper;
+import com.slothyhub.compat.InputCompat;
 import com.slothyhub.ui.Ui;
 import net.minecraft.class_2561;
 import net.minecraft.class_332;
@@ -17,6 +18,7 @@ public class SlothySettingsScreen extends class_437 {
     private float toggleAnim_anim = 0, toggleAnim_bg = 0, toggleAnim_stars = 0, toggleAnim_sort = 0, toggleAnim_confirm = 0, toggleAnim_cit = 0;
     private String statusMessage = null;
     private long statusAt;
+    private final InputCompat.Poller inputPoller = new InputCompat.Poller();
 
     private record Section(String header, List<Row> rows) {}
     private record Row(String label, String key, String hint) {}
@@ -50,6 +52,7 @@ public class SlothySettingsScreen extends class_437 {
 
     @Override
     public void method_25394(class_332 ctx, int mx, int my, float delta) {
+        inputPoller.poll(mx, my, (x, y, btn) -> method_25402(x, y, btn), null);
         ctx.method_25294(0, 0, field_22789, field_22790, Ui.COL_BG);
         Ui.drawSubscreenHeader(ctx, field_22793, field_22789, "SETTINGS  //  SLOTHYHUB", delta);
         // Back pill
@@ -149,7 +152,7 @@ public class SlothySettingsScreen extends class_437 {
         }
     }
 
-    @Override
+
     public boolean method_25402(double mx, double my, int button) {
         if (button == 0) {
             // Back button
@@ -160,8 +163,8 @@ public class SlothySettingsScreen extends class_437 {
             // Back
             int bx = field_22789 / 2 + 64, by = field_22790 - 27;
             if (mx >= bx && mx <= bx + 48 && my >= by && my <= by + 20) { method_25419(); return true; }
-            // Toggle rows
-            int rowY = 174;
+            // Toggle rows (must match render loop rowY math)
+            int rowY = 158;
             for (Section section : sections) {
                 rowY += 16;
                 for (Row row : section.rows()) {
@@ -172,7 +175,7 @@ public class SlothySettingsScreen extends class_437 {
                 }
             }
         }
-        return super.method_25402(mx, my, button);
+        return InputCompat.delegateToChildren(this, mx, my, button);
     }
 
     private void toggleValue(String key) {

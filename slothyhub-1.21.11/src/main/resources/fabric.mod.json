@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "slothyhub",
+  "version": "${version}",
+  "name": "Slothy's Tree",
+  "description": "A sloth-themed resource pack hub for Minecraft 1.21.11. Browse, apply, and build custom texture packs. CIT is provided by the separate slothyhub-cit mod.",
+  "authors": ["IlySlothy"],
+  "contact": {
+    "homepage": "https://github.com/IlySlothy/Slothy-s-Tree",
+    "sources": "https://github.com/IlySlothy/Slothy-s-Tree",
+    "issues": "https://github.com/IlySlothy/Slothy-s-Tree/issues"
+  },
+  "license": "MIT",
+  "icon": "assets/slothyhub/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["com.slothyhub.SlothyHubMod"]
+  },
+  "mixins": ["slothyhub.mixins.json"],
+  "accessWidener": "slothyhub.accesswidener",
+  "depends": {
+    "fabricloader": ">=0.14.0",
+    "minecraft": ">=1.21.9",
+    "java": ">=17",
+    "fabric-api": "*"
+  }
+}

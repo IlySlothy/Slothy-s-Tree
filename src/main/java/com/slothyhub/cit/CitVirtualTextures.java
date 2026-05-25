@@ -8,12 +8,8 @@ import net.minecraft.class_1058;
 import net.minecraft.class_2960;
 import net.minecraft.class_310;
 import net.minecraft.class_3300;
-import net.minecraft.class_7368;
-import net.minecraft.class_7764;
-import net.minecraft.class_7771;
 
 import java.io.InputStream;
-import java.lang.reflect.Constructor;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -29,11 +25,12 @@ public final class CitVirtualTextures {
     private static final Map<String, class_2960> RULE_TEXTURES = new HashMap<>();
     private static final Map<String, class_1058> RULE_SPRITES = new HashMap<>();
     private static int seq = 0;
-    private static Constructor<class_1058> SPRITE_CTOR;
 
     private CitVirtualTextures() {}
 
     public static void rebuild(class_3300 manager, CitRuleSet ruleSet) {
+        // MC 1.21.9+ uses slothyhub-modern-cit (SpriteContents API changed).
+        if (com.slothyhub.compat.McVersion.atLeast("1.21.9")) return;
         clear();
         if (ruleSet.isEmpty()) return;
         class_310 mc = class_310.method_1551();
@@ -108,29 +105,33 @@ public final class CitVirtualTextures {
             if (colon >= 0) prop = prop.substring(colon + 1);
             if (prop.endsWith(".properties")) {
                 String dir = prop.substring(0, prop.lastIndexOf('/') + 1);
-                String adjacent = dir + tex + ".png";
+                String adjacent = lowercasePath(dir + tex + ".png");
                 if (!paths.contains(adjacent)) paths.add(adjacent);
             }
-            String itemTex = "textures/item/" + tex + ".png";
+            String itemTex = lowercasePath("textures/item/" + tex + ".png");
             if (!paths.contains(itemTex)) paths.add(itemTex);
         }
         return paths;
     }
 
-    /** Primary PNG path for a CIT rule. */
+    /** Primary PNG path for a CIT rule. Resource paths must be lowercase for MC 1.21+. */
     public static String resolvePngAssetPath(CitRule rule) {
-        String tex = rule.texture.replace('\\', '/');
+        String tex = rule.texture.replace('\\', '/').trim();
         if (tex.contains("/")) {
             if (tex.startsWith("item/") || tex.startsWith("block/"))
-                return "textures/" + tex + ".png";
-            return tex.endsWith(".png") ? tex : tex + ".png";
+                return lowercasePath("textures/" + (tex.endsWith(".png") ? tex : tex + ".png"));
+            return lowercasePath(tex.endsWith(".png") ? tex : tex + ".png");
         }
         String prop = rule.id;
         int colon = prop.indexOf(':');
         if (colon >= 0) prop = prop.substring(colon + 1);
         if (!prop.endsWith(".properties")) return null;
         String dir = prop.substring(0, prop.lastIndexOf('/') + 1);
-        return dir + tex + ".png";
+        return lowercasePath(dir + tex + ".png");
+    }
+
+    private static String lowercasePath(String path) {
+        return path.toLowerCase(Locale.ROOT);
     }
 
     public static void clear() {
@@ -145,37 +146,22 @@ public final class CitVirtualTextures {
         seq = 0;
     }
 
+    /** Used by slothyhub-modern-cit on MC 1.21.9+. */
+    public static void registerRuleAssets(String ruleId, class_2960 texId, class_1058 sprite) {
+        RULE_TEXTURES.put(ruleId, texId);
+        if (sprite != null) RULE_SPRITES.put(ruleId, sprite);
+    }
+
     private static class_1058 createSprite(class_2960 id, class_1011 img, class_1043 uploaded) {
         try {
-            int w = img.method_4307();
-            int h = img.method_4323();
-            class_7764 contents = new class_7764(id, new class_7771(w, h), img, class_7368.field_38688);
-            Constructor<class_1058> ctor = spriteCtor();
-            // Params: atlasWidth, atlasHeight, x, y — full texture occupies 0..1 UV
-            class_1058 sprite = ctor.newInstance(id, contents, w, h, 0, 0);
-            if (uploaded != null) {
-                try {
-                    com.mojang.blaze3d.textures.GpuTexture gpu = uploaded.method_68004();
-                    if (gpu != null) sprite.method_4584(gpu);
-                } catch (Exception e) {
-                    SlothyHubMod.LOGGER.debug("CIT: sprite GPU bind failed for {}: {}", id, e.getMessage());
-                }
-            }
+            class_1058 sprite = DrawHelper.createFullSprite(id, img);
+            if (sprite == null) return null;
+            DrawHelper.bindSpriteGpu(sprite, uploaded);
             return sprite;
         } catch (Exception e) {
             SlothyHubMod.LOGGER.debug("CIT sprite create failed for {}: {}", id, e.getMessage());
             return null;
         }
-    }
-
-    @SuppressWarnings("unchecked")
-    private static Constructor<class_1058> spriteCtor() throws NoSuchMethodException {
-        if (SPRITE_CTOR == null) {
-            SPRITE_CTOR = class_1058.class.getDeclaredConstructor(
-                class_2960.class, class_7764.class, int.class, int.class, int.class, int.class);
-            SPRITE_CTOR.setAccessible(true);
-        }
-        return SPRITE_CTOR;
     }
 
     private static String sanitize(String s) {

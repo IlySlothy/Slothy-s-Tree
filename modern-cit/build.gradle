@@ -1,0 +1,59 @@
+plugins {
+    id 'fabric-loom' version "${loom_version}"
+}
+
+version = '1.0.3-mc1.21.11'
+group = project.maven_group
+
+base {
+    archivesName = 'slothyhub-cit'
+}
+
+repositories {
+    mavenCentral()
+}
+
+loom {
+    mods {
+        slothyhub_cit {
+            sourceSet sourceSets.main
+        }
+    }
+    mixin {
+        useLegacyMixinAp = true
+    }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.modern_minecraft_version}"
+    mappings loom.layered {
+        mappings "net.fabricmc:intermediary:${project.modern_minecraft_version}"
+    }
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.modern_fabric_api_version}"
+    modImplementation "io.github.llamalad7:mixinextras-fabric:0.4.1"
+    compileOnly project(':')
+}
+
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('fabric.mod.json') {
+        expand 'version': project.version
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    it.options.release = 17
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+jar {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}

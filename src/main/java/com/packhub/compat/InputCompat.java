@@ -1,15 +1,18 @@
 package com.packhub.compat;
 
 import com.packhub.ui.CustomButtonBase;
+import com.slothyhub.compat.McVersion;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import net.minecraft.class_310;
 import net.minecraft.class_364;
 import net.minecraft.class_4069;
+import net.minecraft.class_437;
 import org.lwjgl.glfw.GLFW;
 
 public final class InputCompat {
    private static final boolean NEEDS_POLLING;
+   private static final boolean LEGACY_CHILD_CLICK_API;
    private static final Method OLD_CHILD_MC;
    private static final Method NEW_CHILD_MC;
    private static final Constructor<?> CLICK_CTOR;
@@ -30,14 +33,12 @@ public final class InputCompat {
    public static boolean delegateToChildren(class_4069 parent, double mx, double my, int button) {
       for (class_364 child : parent.method_25396()) {
          boolean consumed = false;
-         if (NEEDS_POLLING) {
-            if (child instanceof CustomButtonBase btn) {
-               consumed = btn.tryPress(mx, my);
-            } else {
-               consumed = callNewMouseClicked(child, mx, my, button);
-            }
-         } else {
+         if (child instanceof CustomButtonBase btn) {
+            consumed = btn.tryPress(mx, my);
+         } else if (LEGACY_CHILD_CLICK_API) {
             consumed = callOldMouseClicked(child, mx, my, button);
+         } else {
+            consumed = callNewMouseClicked(child, mx, my, button);
          }
 
          if (consumed) {
@@ -79,8 +80,19 @@ public final class InputCompat {
       }
    }
 
+   private static boolean screenHasLegacyClick() {
+      for (Method m : class_437.class.getMethods()) {
+         Class<?>[] p = m.getParameterTypes();
+         if (p.length == 3 && p[0] == double.class && p[1] == double.class && p[2] == int.class
+            && m.getReturnType() == boolean.class) {
+            return true;
+         }
+      }
+      return false;
+   }
+
    static {
-      boolean newApi = false;
+      boolean childLegacy = false;
       Method oldMc = null;
       Method newMc = null;
       Constructor<?> clickCtor = null;
@@ -90,15 +102,14 @@ public final class InputCompat {
          for (Method m : class_364.class.getMethods()) {
             Class<?>[] p = m.getParameterTypes();
             if (p.length == 3 && p[0] == double.class && p[1] == double.class && p[2] == int.class && m.getReturnType() == boolean.class) {
+               childLegacy = true;
                oldMc = m;
                m.setAccessible(true);
                break;
             }
          }
 
-         if (oldMc == null) {
-            newApi = true;
-
+         if (!childLegacy) {
             label68:
             for (Method mx : class_364.class.getMethods()) {
                Class<?>[] p = mx.getParameterTypes();
@@ -132,7 +143,8 @@ public final class InputCompat {
       } catch (Exception var22) {
       }
 
-      NEEDS_POLLING = newApi;
+      LEGACY_CHILD_CLICK_API = childLegacy;
+      NEEDS_POLLING = McVersion.atLeast("1.21.9") || !screenHasLegacyClick();
       OLD_CHILD_MC = oldMc;
       NEW_CHILD_MC = newMc;
       CLICK_CTOR = clickCtor;

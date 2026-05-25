@@ -1,0 +1,41 @@
+plugins {
+    id 'base'
+}
+
+version = '1.0.3-mc1.21.11'
+group = project.maven_group
+
+tasks.register('remapJar', Jar) {
+    dependsOn rootProject.tasks.named('remapJar')
+    archiveBaseName.set('slothyhub')
+    archiveVersion.set(version)
+    destinationDirectory.set(layout.buildDirectory.dir('libs'))
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    from(zipTree(rootProject.tasks.named('remapJar').get().archiveFile)) {
+        exclude 'fabric.mod.json'
+        exclude 'slothyhub.mixins.json'
+        exclude 'META-INF/MANIFEST.MF'
+    }
+    from('src/main/resources') {
+        include 'fabric.mod.json'
+        include 'slothyhub.mixins.json'
+        expand 'version': version
+    }
+}
+
+tasks.register('sourcesJar', Jar) {
+    dependsOn rootProject.tasks.named('sourcesJar')
+    archiveClassifier.set('sources')
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from(zipTree(rootProject.tasks.named('sourcesJar').get().archiveFile))
+}
+
+tasks.named('assemble') {
+    dependsOn tasks.named('remapJar')
+}
+
+artifacts {
+    archives tasks.named('remapJar')
+    archives tasks.named('sourcesJar')
+}

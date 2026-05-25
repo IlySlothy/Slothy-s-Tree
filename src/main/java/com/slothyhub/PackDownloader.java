@@ -58,32 +58,77 @@ public class PackDownloader {
         VersionCompat.refresh(manager);
         Collection<String> enabled = VersionCompat.enabledNames(manager);
         boolean markerChanged = false;
+        List<String> missing = new ArrayList<>();
         for (Map.Entry<String, String> entry : new ArrayList<>(marker.entrySet())) {
-            String packId = entry.getKey();
             String folder = entry.getValue();
             Path resolved = resolvePackPath(resourcePacksDir, folder);
             if (resolved == null) {
                 String alt = alternatePackFilename(resourcePacksDir, folder);
                 if (alt != null) {
                     folder = alt;
-                    marker.put(packId, alt);
+                    marker.put(entry.getKey(), alt);
                     markerChanged = true;
                     resolved = resolvePackPath(resourcePacksDir, folder);
                 }
             }
             if (resolved == null) continue;
             if (!isPackEnabled(enabled, folder)) {
-                try {
-                    applyResourcePack(mc, folder);
-                    SlothyHubMod.LOGGER.info("SlothyHub: re-applied resource pack '{}'", folder);
-                    enabled = VersionCompat.enabledNames(mc.method_1520());
-                } catch (Exception e) {
-                    SlothyHubMod.LOGGER.warn("SlothyHub: could not re-apply '{}': {}", folder, e.getMessage());
-                }
+                missing.add(folder);
             }
         }
         if (markerChanged) writeMarker(mc, marker);
-        scheduleCitReload(mc);
+        if (!missing.isEmpty()) {
+            try {
+                batchApplyResourcePacks(mc, missing);
+                SlothyHubMod.LOGGER.info("SlothyHub: re-applied {} resource pack(s) in one reload: {}",
+                    missing.size(), missing);
+            } catch (Exception e) {
+                SlothyHubMod.LOGGER.warn("SlothyHub: batch re-apply failed: {}", e.getMessage());
+            }
+        } else {
+            scheduleCitReload(mc);
+        }
+    }
+
+    /** Enable multiple packs then reload resources once (avoids N sequential reloads on startup). */
+    private static void batchApplyResourcePacks(class_310 mc, List<String> folderNames) {
+        class_3283 manager = mc.method_1520();
+        VersionCompat.refresh(manager);
+        LinkedHashSet<String> enabled = new LinkedHashSet<>(VersionCompat.enabledNames(manager));
+        List<String> applied = new ArrayList<>();
+
+        for (String folderName : folderNames) {
+            String id = resolveProfileId(manager, folderName, 12);
+            if (id == null) {
+                SlothyHubMod.LOGGER.warn("SlothyHub: pack '{}' not found in manager", folderName);
+                continue;
+            }
+            enabled.remove(id);
+            enabled.remove("file/" + folderName);
+            enabled.remove("file:" + folderName);
+            enabled.remove(folderName);
+            enabled.add(id);
+            applied.add(folderName);
+        }
+        if (applied.isEmpty()) return;
+
+        VersionCompat.setEnabled(manager, enabled);
+        List<String> optList = mc.field_1690.field_1887;
+        optList.clear();
+        optList.addAll(enabled);
+        mc.field_1690.method_1640();
+        VersionCompat.refresh(manager);
+
+        mc.method_1521()
+            .thenRun(() -> {
+                class_310 client = class_310.method_1551();
+                if (client != null) scheduleCitReload(client);
+            })
+            .exceptionally(e -> {
+                SlothyHubMod.LOGGER.error("reloadResources failed during batch apply", e);
+                return null;
+            });
+        SlothyHubMod.LOGGER.info("SlothyHub: enabled {} pack(s) pending single reload", applied.size());
     }
 
     private static void scheduleCitReload(class_310 mc) {
@@ -181,6 +226,10 @@ public class PackDownloader {
             SlothyHubMod.LOGGER.info("Downloading pack from {}", downloadUrl);
             HttpURLConnection conn = openWithRedirects(downloadUrl, 5);
             int status = conn.getResponseCode();
+            if (status == 404) {
+                throw new IOException("Pack file not hosted online (HTTP 404). "
+                    + "Only packs uploaded to the server can be downloaded — ask the author to add this one.");
+            }
             if (status != 200) throw new IOException("Server returned HTTP " + status);
             String expectedSha = conn.getHeaderField("X-SlothyHub-SHA256");
             if (expectedSha == null || expectedSha.isBlank()) expectedSha = pack.getSha256();
@@ -362,13 +411,15 @@ public class PackDownloader {
         }
     }
 
-    /** GitHub Releases and other static hosts put the direct URL in pack_url. */
+    /** Explicit pack_url, then static /downloads/ path, then legacy API route. */
     private static String resolveDownloadUrl(Pack pack, String serverUrl) {
         String direct = pack.getPackUrl();
         if (direct != null && !direct.isBlank()) {
             String lower = direct.toLowerCase(Locale.ROOT);
             if (lower.startsWith("http://") || lower.startsWith("https://")) return direct.trim();
         }
+        String staticUrl = pack.getStaticDownloadUrl(serverUrl);
+        if (staticUrl != null && !staticUrl.isBlank()) return staticUrl;
         return pack.getDirectDownloadUrl(serverUrl);
     }
 

@@ -94,7 +94,8 @@ public class TexturePickerScreen extends class_437 {
             new String[]{"assets/minecraft/textures/gui/sprites/hud/heart/absorbing_half.png"}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.GUI, TexFolder.GUI, null),
         new SlotDef("Inventory",     "potion", new String[]{}, null, "inventory",     "🎒", true, "assets/minecraft/textures/gui/container/inventory.png",
             new String[]{"assets/minecraft/textures/gui/container/inventory.png"}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.GUI, TexFolder.GUI, null),
-        new SlotDef("Fireworks",     "firework_rocket", new String[]{}, null, "fireworks",   "🎆", true, "assets/minecraft/textures/item/firework_rocket.png", new String[]{}, new String[]{"assets/minecraft/textures/item/"}, new String[]{"firework"}, ParticleKind.NONE, SlotCategory.ITEMS, TexFolder.ITEM, null),
+        new SlotDef("Fireworks",     "firework_rocket", new String[]{}, null, "fireworks",   "🎆", true, "assets/minecraft/textures/item/firework_rocket.png",
+            new String[]{"assets/minecraft/textures/item/firework_rocket.png"}, new String[]{"assets/minecraft/textures/item/"}, new String[]{"firework_rocket"}, ParticleKind.NONE, SlotCategory.ITEMS, TexFolder.ITEM, null),
         new SlotDef("Golden Apple",  "golden_apple", new String[]{}, null, "golden_apple", "🍎", true, "assets/minecraft/textures/item/golden_apple.png", new String[]{}, new String[]{"assets/minecraft/textures/item/"}, new String[]{"golden_apple"}, ParticleKind.NONE, SlotCategory.ITEMS, TexFolder.ITEM, null),
         new SlotDef("Netherite Sword", "netherite_sword", new String[]{}, null, "netherite_sword", "⚔", true,
             "assets/minecraft/textures/item/netherite_sword.png",
@@ -446,7 +447,7 @@ public class TexturePickerScreen extends class_437 {
             });
             for (var entry : props.entrySet()) {
                 class_2960 rid = entry.getKey();
-                try (InputStream in = ResourceScanHelper.openResource(entry.getValue())) {
+                try (InputStream in = ResourceScanHelper.openMapEntry(manager, rid, entry.getValue())) {
                     if (in == null) continue;
                     String propPath = "assets/" + rid.method_12836() + "/" + rid.method_12832();
                     int before = countOptions(result);
@@ -458,13 +459,18 @@ public class TexturePickerScreen extends class_437 {
         }
 
         java.util.Map<class_2960, ?> pngs = ResourceScanHelper.findResources(manager, "minecraft", id -> {
-            String path = id.method_12832();
-            return path.endsWith(".png") && path.startsWith("textures/") && !path.contains("/cit/");
+            String path = id.method_12832().toLowerCase(Locale.ROOT);
+            if (!path.endsWith(".png")) return false;
+            if (path.contains("/cit/")) return false;
+            return path.startsWith("textures/item/")
+                || path.startsWith("textures/block/")
+                || path.startsWith("textures/particle/")
+                || path.startsWith("textures/gui/");
         });
         for (var entry : pngs.entrySet()) {
             class_2960 rid = entry.getKey();
             String entryPath = "assets/minecraft/" + rid.method_12832();
-            try (InputStream in = ResourceScanHelper.openResource(entry.getValue())) {
+            try (InputStream in = ResourceScanHelper.openMapEntry(manager, rid, entry.getValue())) {
                 if (in == null) continue;
                 int before = countOptions(result);
                 addVanillaTextureOption(packLabel, null, false, entryPath, in.readAllBytes(), result);
@@ -477,7 +483,7 @@ public class TexturePickerScreen extends class_437 {
         for (var entry : oggs.entrySet()) {
             class_2960 rid = entry.getKey();
             String entryPath = "assets/minecraft/" + rid.method_12832();
-            try (InputStream in = ResourceScanHelper.openResource(entry.getValue())) {
+            try (InputStream in = ResourceScanHelper.openMapEntry(manager, rid, entry.getValue())) {
                 if (in == null) continue;
                 int before = countOptions(result);
                 addSoundOption(packLabel, null, false, entryPath, in.readAllBytes(), result);
@@ -566,7 +572,9 @@ public class TexturePickerScreen extends class_437 {
                 if (slot.textureKeywords().length > 0) {
                     boolean kwMatch = false;
                     for (String kw : slot.textureKeywords()) {
-                        if (fileName.toLowerCase(Locale.ROOT).contains(kw.toLowerCase(Locale.ROOT))) {
+                        String kwLower = kw.toLowerCase(Locale.ROOT);
+                        if (fileName.toLowerCase(Locale.ROOT).equals(kwLower)
+                            || fileName.toLowerCase(Locale.ROOT).contains(kwLower)) {
                             kwMatch = true; break;
                         }
                     }
@@ -909,6 +917,49 @@ public class TexturePickerScreen extends class_437 {
             .replaceFirst("(?i)^iregex:", "").replaceFirst("(?i)^regex:", "").trim();
     }
 
+    /**
+     * Last-line defense before writing {@code nbt.display.Name=ipattern:...} into a
+     * generated .properties file. Strips ipattern: prefixes the user may have typed,
+     * collapses exact repetitions (e.g. "Noob SwordNoob Sword" → "Noob Sword"), and
+     * falls back to the slot's default name when the value still contains the default
+     * embedded multiple times.
+     */
+    private static String sanitizeWrittenCitName(String raw, String defaultName) {
+        if (raw == null) return null;
+        String s = stripNamePrefix(raw).trim();
+        if (s.isEmpty()) return defaultName == null ? null : defaultName.trim();
+
+        String collapsed = collapseExactRepetition(s);
+        if (!collapsed.equals(s)) s = collapsed;
+
+        if (defaultName != null && !defaultName.isBlank()) {
+            String defLower = defaultName.toLowerCase(Locale.ROOT).trim();
+            String sLower = s.toLowerCase(Locale.ROOT);
+            int count = 0;
+            int idx = 0;
+            while ((idx = sLower.indexOf(defLower, idx)) >= 0) { count++; idx += defLower.length(); }
+            if (count >= 2) s = defaultName.trim();
+        }
+        return s;
+    }
+
+    /** Mirror of CitRuleParser.reduceExactRepetition for write-side use. */
+    private static String collapseExactRepetition(String s) {
+        if (s == null) return null;
+        int len = s.length();
+        if (len < 4) return s;
+        for (int k = 1; k <= len / 2; k++) {
+            if (len % k != 0) continue;
+            String head = s.substring(0, k);
+            boolean repeats = true;
+            for (int i = k; i < len; i += k) {
+                if (!s.regionMatches(i, head, 0, k)) { repeats = false; break; }
+            }
+            if (repeats) return head;
+        }
+        return s;
+    }
+
     private static String resolvePngEntry(String propDir, String texProp, StreamOpener opener) {
         String base = texProp.replace('\\', '/');
         String[] tries = {
@@ -1048,12 +1099,12 @@ public class TexturePickerScreen extends class_437 {
         putEntry(zos, citFolder + citBase + ".png", png);
         copyMcmetaIfPresent(zos, opt, citFolder + citBase + ".png");
 
-        String citName = effectiveCitName(si);
+        String citName = sanitizeWrittenCitName(effectiveCitName(si), slot.defaultCitName());
         StringBuilder sb = new StringBuilder();
         sb.append("type=item\n");
         sb.append("items=").append(slot.primaryItem()).append("\n");
         if (citName != null && !citName.isBlank())
-            sb.append("nbt.display.Name=ipattern:").append(citName.trim()).append("\n");
+            sb.append("nbt.display.Name=ipattern:").append(citName).append("\n");
         sb.append("texture=item/").append(texName).append("\n");
         putEntry(zos, citFolder + citBase + ".properties", sb.toString());
 
@@ -1238,6 +1289,7 @@ public class TexturePickerScreen extends class_437 {
         if (texThumbs.containsKey(key)) return;
         byte[] png = opt.pngPreview();
         if (png == null || png.length == 0) return;
+        if (!PackIconLoader.isValidPng(png)) return;
         try {
             class_1011 img = class_1011.method_4309(new ByteArrayInputStream(png));
             img = TextureAnimationUtil.firstFrameFromImage(img, null);

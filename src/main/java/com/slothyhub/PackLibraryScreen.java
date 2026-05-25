@@ -1,6 +1,7 @@
 package com.slothyhub;
 
 import com.slothyhub.compat.DrawHelper;
+import com.slothyhub.compat.InputCompat;
 import com.slothyhub.ui.CustomButton;
 import com.slothyhub.ui.CustomButtonBase;
 import com.slothyhub.ui.Ui;
@@ -36,6 +37,7 @@ public class PackLibraryScreen extends class_437 {
     private List<Pack> packs = new ArrayList<>();
     private final Map<String, String> status = new HashMap<>();
     private double scroll = 0, scrollTarget = 0;
+    private final InputCompat.Poller inputPoller = new InputCompat.Poller();
 
     public PackLibraryScreen(class_437 parent) {
         super(class_2561.method_43470("My Pack Library"));
@@ -75,6 +77,7 @@ public class PackLibraryScreen extends class_437 {
 
     @Override
     public void method_25394(class_332 ctx, int mx, int my, float delta) {
+        inputPoller.poll(mx, my, (x, y, btn) -> method_25402(x, y, btn), null);
         scroll += (scrollTarget - scroll) * Math.min(1f, delta * 0.28f);
         float phase = (float)(System.currentTimeMillis() % 4000L) / 4000f;
 
@@ -168,10 +171,10 @@ public class PackLibraryScreen extends class_437 {
         ctx.method_25294(trkX, thumbY, trkX + 3, thumbY + thumbH, col(Ui.COL_ACCENT & 0xFFFFFF, 200));
     }
 
-    @Override
+
     public boolean method_25402(double mx, double my, int button) {
-        if (button != 0) return super.method_25402(mx, my, button);
-        if (super.method_25402(mx, my, button)) return true;
+        if (button != 0) return InputCompat.delegateToChildren(this, mx, my, button);
+        if (InputCompat.delegateToChildren(this, mx, my, button)) return true;
 
         int top = HEADER, bot = field_22790 - FOOTER;
         int cardW = Math.min(field_22789 - PAD * 2, 720);

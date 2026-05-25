@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "slothyhub_cit",
+  "version": "${version}",
+  "name": "SlothyHub CIT",
+  "description": "Custom Item Textures for Minecraft 1.21.9-1.21.11. Install alongside Slothy's Tree; not needed on 1.21.8 (CIT is built into the main jar there).",
+  "authors": ["IlySlothy"],
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["com.slothyhub.modern.ModernCitMod"]
+  },
+  "mixins": ["slothyhub-cit.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.14.0",
+    "minecraft": ">=1.21.9",
+    "java": ">=17",
+    "fabric-api": "*",
+    "slothyhub": "*"
+  }
+}

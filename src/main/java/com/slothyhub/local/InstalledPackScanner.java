@@ -17,6 +17,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -26,6 +27,9 @@ import java.util.zip.ZipFile;
  * {@code resourcepacks/slothyhub-local/}, tagged for the ElyPVP filter.
  */
 public final class InstalledPackScanner {
+
+    /** Packs already warned about uppercase CIT paths — keeps the log to one line per pack. */
+    private static final java.util.Set<String> UPPERCASE_CIT_WARNED = ConcurrentHashMap.newKeySet();
 
     private InstalledPackScanner() {}
 
@@ -57,11 +61,70 @@ public final class InstalledPackScanner {
                 if (!forceLocal && !isIlySlothyPack(entry, isZip)) continue;
                 if (out.containsKey(key)) continue;
                 Pack p = buildPack(entry, name, isZip, true);
-                if (p != null) out.put(key, p);
+                if (p != null) {
+                    out.put(key, p);
+                    warnIfPackHasUppercaseCitFolders(entry, name, isZip);
+                }
             }
         } catch (IOException e) {
             SlothyHubMod.LOGGER.warn("InstalledPackScanner: {}", e.getMessage());
         }
+    }
+
+    /**
+     * Minecraft 1.19+ rejects resource paths containing uppercase characters with
+     * {@code Invalid path 'optifine/cit/Pro_Sword/...'} errors. We can't rename
+     * folders inside someone else's pack, so warn once per pack so the user
+     * understands why their CIT entries silently don't apply.
+     */
+    private static void warnIfPackHasUppercaseCitFolders(Path entry, String name, boolean isZip) {
+        if (!UPPERCASE_CIT_WARNED.add(name.toLowerCase(Locale.ROOT))) return;
+        String offender = isZip ? scanZipForUppercaseCit(entry) : scanFolderForUppercaseCit(entry);
+        if (offender == null) return;
+        SlothyHubMod.LOGGER.warn(
+            "Pack '{}' contains uppercase CIT folders (e.g. '{}') — Minecraft 1.19+ rejects these paths. "
+            + "Rename the folder to lowercase (e.g. pro_sword, warden_sword) for CIT to apply.",
+            name, offender);
+    }
+
+    private static String scanZipForUppercaseCit(Path zipPath) {
+        try (ZipFile zf = new ZipFile(zipPath.toFile())) {
+            var it = zf.entries();
+            while (it.hasMoreElements()) {
+                String e = it.nextElement().getName().replace('\\', '/');
+                String hit = uppercaseCitSegment(e);
+                if (hit != null) return hit;
+            }
+        } catch (Exception ignored) {}
+        return null;
+    }
+
+    private static String scanFolderForUppercaseCit(Path folder) {
+        try (Stream<Path> walk = Files.walk(folder)) {
+            for (Path p : walk.toList()) {
+                String rel = folder.relativize(p).toString().replace('\\', '/');
+                String hit = uppercaseCitSegment(rel);
+                if (hit != null) return hit;
+            }
+        } catch (Exception ignored) {}
+        return null;
+    }
+
+    /** Returns the offending segment (e.g. "Pro_Sword") if any CIT path has uppercase chars. */
+    private static String uppercaseCitSegment(String path) {
+        String lower = path.toLowerCase(Locale.ROOT);
+        int idx = lower.indexOf("optifine/cit/");
+        if (idx < 0) idx = lower.indexOf("citresewn/cit/");
+        if (idx < 0) idx = lower.indexOf("mcpatcher/cit/");
+        if (idx < 0) return null;
+        String[] parts = path.substring(idx).split("/");
+        for (int i = 2; i < parts.length; i++) {
+            for (int c = 0; c < parts[i].length(); c++) {
+                char ch = parts[i].charAt(c);
+                if (ch >= 'A' && ch <= 'Z') return parts[i];
+            }
+        }
+        return null;
     }
 
     private static boolean isIlySlothyPack(Path entry, boolean isZip) {

@@ -1,6 +1,7 @@
 package com.slothyhub;
 
 import com.slothyhub.compat.DrawHelper;
+import com.slothyhub.compat.InputCompat;
 import com.slothyhub.ui.Ui;
 import net.minecraft.class_2561;
 import net.minecraft.class_332;
@@ -18,6 +19,7 @@ public class SlothyEditScreen extends class_437 {
     private class_342 nameField;
     private String statusMsg = null;
     private long statusAt = 0;
+    private final InputCompat.Poller inputPoller = new InputCompat.Poller();
 
     public SlothyEditScreen(class_437 parent, String packId, String folderName, String currentName) {
         super(class_2561.method_43470("Edit Pack"));
@@ -41,6 +43,7 @@ public class SlothyEditScreen extends class_437 {
 
     @Override
     public void method_25394(class_332 ctx, int mx, int my, float delta) {
+        inputPoller.poll(mx, my, (x, y, btn) -> method_25402(x, y, btn), null);
         ctx.method_25294(0, 0, field_22789, field_22790, Ui.COL_BG);
         Ui.drawSubscreenHeader(ctx, field_22793, field_22789, "EDIT PACK  //  SLOTHYHUB", delta);
 
@@ -73,7 +76,7 @@ public class SlothyEditScreen extends class_437 {
         DrawHelper.drawText(ctx, field_22793, label, x + (w - field_22793.method_1727(label)) / 2, y + (h - 8) / 2, fg, false);
     }
 
-    @Override
+
     public boolean method_25402(double mx, double my, int button) {
         if (button == 0) {
             if (mx >= field_22789 / 2 - 56 && mx <= field_22789 / 2 + 56 && my >= field_22790 - 27 && my <= field_22790 - 7) {
@@ -83,7 +86,7 @@ public class SlothyEditScreen extends class_437 {
                 method_25419(); return true;
             }
         }
-        return super.method_25402(mx, my, button);
+        return InputCompat.delegateToChildren(this, mx, my, button);
     }
 
     private void save() {

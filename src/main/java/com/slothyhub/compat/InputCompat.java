@@ -6,11 +6,13 @@ import java.lang.reflect.Method;
 import net.minecraft.class_310;
 import net.minecraft.class_364;
 import net.minecraft.class_4069;
+import net.minecraft.class_437;
 import org.lwjgl.glfw.GLFW;
 
 public final class InputCompat {
 
-    private static final boolean NEEDS_POLLING;
+    private static final boolean LEGACY_CHILD_CLICK_API;
+    private static final boolean USE_GLFW_POLLING;
     private static final Method OLD_CHILD_MC;
     private static final Method NEW_CHILD_MC;
     private static final Constructor<?> CLICK_CTOR;
@@ -18,7 +20,7 @@ public final class InputCompat {
 
     private InputCompat() {}
 
-    public static boolean needsPolling() { return NEEDS_POLLING; }
+    public static boolean needsPolling() { return USE_GLFW_POLLING; }
 
     public static boolean isShiftDown() {
         long window = class_310.method_1551().method_22683().method_4490();
@@ -37,11 +39,13 @@ public final class InputCompat {
     }
 
     public static boolean clickChild(class_364 child, double mx, double my, int button) {
-        if (NEEDS_POLLING) {
-            if (child instanceof CustomButtonBase btn) return btn.tryPress(mx, my);
-            return callNewMouseClicked(child, mx, my, button);
+        if (child instanceof CustomButtonBase btn) {
+            return btn.tryPress(mx, my);
         }
-        return callOldMouseClicked(child, mx, my, button);
+        if (LEGACY_CHILD_CLICK_API) {
+            return callOldMouseClicked(child, mx, my, button);
+        }
+        return callNewMouseClicked(child, mx, my, button);
     }
 
     private static boolean callOldMouseClicked(class_364 child, double mx, double my, int button) {
@@ -58,34 +62,56 @@ public final class InputCompat {
         } catch (Exception e) { return false; }
     }
 
+    private static boolean screenHasLegacyClick() {
+        for (Method m : class_437.class.getMethods()) {
+            Class<?>[] p = m.getParameterTypes();
+            if (p.length == 3 && p[0] == double.class && p[1] == double.class && p[2] == int.class
+                && m.getReturnType() == boolean.class) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     static {
-        boolean newApi = false;
-        Method oldMc = null, newMc = null;
-        Constructor<?> clickCtor = null, miCtor = null;
+        boolean childLegacy = false;
+        Method oldMc = null;
+        Method newMc = null;
+        Constructor<?> clickCtor = null;
+        Constructor<?> miCtor = null;
+
         try {
             for (Method m : class_364.class.getMethods()) {
                 Class<?>[] p = m.getParameterTypes();
-                if (p.length == 3 && p[0] == double.class && p[1] == double.class && p[2] == int.class && m.getReturnType() == boolean.class) {
-                    oldMc = m; m.setAccessible(true); break;
+                if (p.length == 3 && p[0] == double.class && p[1] == double.class && p[2] == int.class
+                    && m.getReturnType() == boolean.class) {
+                    childLegacy = true;
+                    oldMc = m;
+                    m.setAccessible(true);
+                    break;
                 }
             }
-            if (oldMc == null) {
-                newApi = true;
+
+            if (!childLegacy) {
                 outer:
                 for (Method mx : class_364.class.getMethods()) {
                     Class<?>[] p = mx.getParameterTypes();
                     if (p.length == 2 && mx.getReturnType() == boolean.class && !p[0].isPrimitive() && p[1] == boolean.class) {
-                        newMc = mx; mx.setAccessible(true);
+                        newMc = mx;
+                        mx.setAccessible(true);
                         Class<?> clickClass = p[0];
                         for (Constructor<?> ctor : clickClass.getDeclaredConstructors()) {
                             Class<?>[] cp = ctor.getParameterTypes();
                             if (cp.length == 3 && cp[0] == double.class && cp[1] == double.class) {
-                                ctor.setAccessible(true); clickCtor = ctor;
-                                Class<?> miClass = cp[2];
-                                for (Constructor<?> miC : miClass.getDeclaredConstructors()) {
+                                ctor.setAccessible(true);
+                                clickCtor = ctor;
+                                Class<?> mouseInputClass = cp[2];
+                                for (Constructor<?> miC : mouseInputClass.getDeclaredConstructors()) {
                                     Class<?>[] mp = miC.getParameterTypes();
                                     if (mp.length == 2 && mp[0] == int.class && mp[1] == int.class) {
-                                        miC.setAccessible(true); miCtor = miC; break outer;
+                                        miC.setAccessible(true);
+                                        miCtor = miC;
+                                        break outer;
                                     }
                                 }
                                 break outer;
@@ -96,20 +122,17 @@ public final class InputCompat {
                 }
             }
         } catch (Exception ignored) {}
-        NEEDS_POLLING = newApi;
+
+        LEGACY_CHILD_CLICK_API = childLegacy;
+        USE_GLFW_POLLING = McVersion.atLeast("1.21.9") || !screenHasLegacyClick();
         OLD_CHILD_MC = oldMc;
         NEW_CHILD_MC = newMc;
         CLICK_CTOR = clickCtor;
         MOUSE_INPUT_CTOR = miCtor;
     }
 
-    /** Functional interface for the scroll delta callback. */
     public interface ScrollHandler { boolean handleScroll(double delta); }
 
-    /**
-     * Adapter for mouseScrolled — handles both legacy (dx, dy, vScroll, button) and
-     * modern (dx, dy, vScroll) signatures by forwarding the vertical delta.
-     */
     public static boolean handleMouseScrolled(ScrollHandler handler, double mx, double my, double vScroll) {
         return handler.handleScroll(vScroll);
     }
@@ -121,7 +144,7 @@ public final class InputCompat {
         private boolean prevLmb, prevRmb, prevEsc;
 
         public void poll(int mx, int my, ClickHandler clickHandler, KeyHandler keyHandler) {
-            if (!NEEDS_POLLING) return;
+            if (!USE_GLFW_POLLING) return;
             long window = class_310.method_1551().method_22683().method_4490();
             boolean lmb = GLFW.glfwGetMouseButton(window, 0) == 1;
             boolean rmb = GLFW.glfwGetMouseButton(window, 1) == 1;

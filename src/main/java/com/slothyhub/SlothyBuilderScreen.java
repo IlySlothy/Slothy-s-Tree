@@ -1,6 +1,7 @@
 package com.slothyhub;
 
 import com.slothyhub.compat.DrawHelper;
+import com.slothyhub.compat.InputCompat;
 import com.slothyhub.ui.Ui;
 import net.minecraft.class_2561;
 import net.minecraft.class_332;
@@ -23,6 +24,7 @@ public class SlothyBuilderScreen extends class_437 {
     private float buildPulseT = 0;
     private boolean building = false;
     private String buildResult = null;
+    private final InputCompat.Poller inputPoller = new InputCompat.Poller();
 
     private static final String[] STEPS = {"SELECT PACKS", "CONFIGURE", "WEAVE"};
 
@@ -43,6 +45,7 @@ public class SlothyBuilderScreen extends class_437 {
 
     @Override
     public void method_25394(class_332 ctx, int mx, int my, float delta) {
+        inputPoller.poll(mx, my, (x, y, btn) -> method_25402(x, y, btn), null);
         ctx.method_25294(0, 0, field_22789, field_22790, Ui.COL_BG);
         Ui.drawSubscreenHeader(ctx, field_22793, field_22789, "WEAVE PACK  //  SLOTHYHUB", delta);
         renderStepIndicator(ctx, delta);
@@ -153,7 +156,7 @@ public class SlothyBuilderScreen extends class_437 {
         DrawHelper.drawText(ctx, field_22793, label, x + (w - field_22793.method_1727(label)) / 2, y + (h - 8) / 2, fg, false);
     }
 
-    @Override
+
     public boolean method_25402(double mx, double my, int button) {
         if (button == 0) {
             // Back/close left button
@@ -165,7 +168,7 @@ public class SlothyBuilderScreen extends class_437 {
                 if (step < 2) { step++; Ui.playClick(); } else startWeave(); return true;
             }
         }
-        return super.method_25402(mx, my, button);
+        return InputCompat.delegateToChildren(this, mx, my, button);
     }
 
     private void startWeave() {

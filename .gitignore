@@ -24,7 +24,7 @@ jdk/
 
 # Local decompiled MC dumps (debug only)
 cit_javap.txt
-cit10442*.txt
+cit*.txt
 citlayer214.txt
 drawcontext214.txt
 itemrenderer214.txt
@@ -32,3 +32,16 @@ net_minecraft_class_*.java
 .cit-resewn-fork/
 .cit-resewn-main/
 scan-atlas.gradle
+
+# Editor / agent caches
+.cursor/
+**/*.bak
+
+# Per-subproject Gradle / build caches (covered by build/ and .gradle/ above
+# but listed explicitly so they're never staged from nested modules)
+modern-cit/build/
+modern-cit/.gradle/
+slothyhub-1.21.11/build/
+slothyhub-1.21.11/.gradle/
+legacy-cit/build/
+legacy-cit/.gradle/
