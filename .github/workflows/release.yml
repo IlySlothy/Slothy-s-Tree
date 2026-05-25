@@ -14,43 +14,47 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Pick release asset
-        id: pick
-        run: |
-          TAG="${GITHUB_REF_NAME}"
-          if [ "$TAG" = "v1.0.3-mc1.21.11" ]; then
-            echo "files=release-assets/slothyhub-1.0.3-mc1.21.11.jar" >> "$GITHUB_OUTPUT"
-            echo "body=## Minecraft 1.21.11 (Fabric)
-
-Download \`slothyhub-1.0.3-mc1.21.11.jar\` and drop it into your Feather mods folder:
-\`.feather/user-mods/1.21.11-fabric/\`
-
-## Requirements
-- Fabric Loader 0.19+
-- Fabric API (matching 1.21.11)
-- Java 21
-
-## Notes
-- Single jar — includes CIT support for 1.21.11
-- Do **not** install the 1.21.8 jar or \`-sources.jar\` alongside this" >> "$GITHUB_OUTPUT"
-          elif [ "$TAG" = "v1.0.2-mc1.20-1.21.8" ]; then
-            echo "files=release-assets/slothyhub-1.0.2-mc1.20-1.21.8.jar" >> "$GITHUB_OUTPUT"
-            echo "body=## Minecraft 1.20 – 1.21.8 (Fabric)
-
-Download \`slothyhub-1.0.2-mc1.20-1.21.8.jar\` and drop it into your Fabric mods folder.
-
-## Requirements
-- Fabric Loader 0.14+
-- Fabric API
-- Java 17+" >> "$GITHUB_OUTPUT"
-          else
-            echo "files=release-assets/slothyhub-1.0.3-mc1.21.11.jar" >> "$GITHUB_OUTPUT"
-            echo "body=See tag name for supported Minecraft version." >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Create GitHub Release
+      - name: Create GitHub Release (1.21.11)
+        if: github.ref == 'refs/tags/v1.0.3-mc1.21.11'
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
-          files: ${{ steps.pick.outputs.files }}
-          body: ${{ steps.pick.outputs.body }}
+          files: release-assets/slothyhub-1.0.3-mc1.21.11.jar
+          body: |
+            ## Minecraft 1.21.11 (Fabric)
+
+            Download `slothyhub-1.0.3-mc1.21.11.jar` and drop it into your Feather mods folder:
+            `.feather/user-mods/1.21.11-fabric/`
+
+            ## Requirements
+            - Fabric Loader 0.19+
+            - Fabric API (matching 1.21.11)
+            - Java 21
+
+            ## Notes
+            - Single jar — includes CIT support for 1.21.11
+            - Do **not** install the 1.21.8 jar or `-sources.jar` alongside this
+
+      - name: Create GitHub Release (1.20–1.21.8)
+        if: github.ref == 'refs/tags/v1.0.2-mc1.20-1.21.8'
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: release-assets/slothyhub-1.0.2-mc1.20-1.21.8.jar
+          body: |
+            ## Minecraft 1.20 – 1.21.8 (Fabric)
+
+            Download `slothyhub-1.0.2-mc1.20-1.21.8.jar` and drop it into your Fabric mods folder.
+
+            ## Requirements
+            - Fabric Loader 0.14+
+            - Fabric API
+            - Java 17+
+
+      - name: Create GitHub Release (fallback)
+        if: github.ref != 'refs/tags/v1.0.3-mc1.21.11' && github.ref != 'refs/tags/v1.0.2-mc1.20-1.21.8'
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: release-assets/slothyhub-1.0.3-mc1.21.11.jar
+          body: See tag name for supported Minecraft version.
