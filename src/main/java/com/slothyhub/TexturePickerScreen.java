@@ -96,6 +96,11 @@ public class TexturePickerScreen extends class_437 {
             new String[]{"assets/minecraft/textures/gui/container/inventory.png"}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.GUI, TexFolder.GUI, null),
         new SlotDef("Fireworks",     "firework_rocket", new String[]{}, null, "fireworks",   "🎆", true, "assets/minecraft/textures/item/firework_rocket.png", new String[]{}, new String[]{"assets/minecraft/textures/item/"}, new String[]{"firework"}, ParticleKind.NONE, SlotCategory.ITEMS, TexFolder.ITEM, null),
         new SlotDef("Golden Apple",  "golden_apple", new String[]{}, null, "golden_apple", "🍎", true, "assets/minecraft/textures/item/golden_apple.png", new String[]{}, new String[]{"assets/minecraft/textures/item/"}, new String[]{"golden_apple"}, ParticleKind.NONE, SlotCategory.ITEMS, TexFolder.ITEM, null),
+        new SlotDef("Netherite Sword", "netherite_sword", new String[]{}, null, "netherite_sword", "⚔", true,
+            "assets/minecraft/textures/item/netherite_sword.png",
+            new String[]{"assets/minecraft/textures/item/netherite_sword.png"},
+            new String[]{"assets/minecraft/textures/item/"}, new String[]{"netherite_sword", "sword"},
+            ParticleKind.NONE, SlotCategory.ITEMS, TexFolder.ITEM, null),
         new SlotDef("Offhands",      "cornflower", new String[]{}, null, "cornflower",  "🌸", true, "assets/minecraft/textures/item/cornflower.png", new String[]{}, new String[]{"assets/minecraft/textures/item/", "assets/minecraft/textures/block/"}, new String[]{"cornflower"}, ParticleKind.NONE, SlotCategory.ITEMS, TexFolder.ITEM, null),
         new SlotDef("Totem of Undying", "totem_of_undying", new String[]{}, null, "totem_of_undying", "♣", true,
             "assets/minecraft/textures/item/totem_of_undying.png",
@@ -114,6 +119,7 @@ public class TexturePickerScreen extends class_437 {
     private static final int ABSORPTION_FULL_SLOT = slotIndexByOutput("heart_absorption_full");
     private static final int ABSORPTION_HALF_SLOT = slotIndexByOutput("heart_absorption_half");
     private static final int HIPPO_SLOT = slotIndexByOutput("dead_tube_coral");
+    private static final int NETHERITE_SWORD_SLOT = slotIndexByOutput("netherite_sword");
     private static final int[][] HEART_PAIRS = {
         { HEART_FULL_SLOT, HEART_HALF_SLOT },
         { ABSORPTION_FULL_SLOT, ABSORPTION_HALF_SLOT },
@@ -386,7 +392,7 @@ public class TexturePickerScreen extends class_437 {
             SlothyHubMod.LOGGER.warn("TexturePicker scan error: {}", e.getMessage());
         }
 
-        mergeSwordPoolIntoHippo(result);
+        mergeSharedSwordPool(result);
 
         class_310 mc = class_310.method_1551();
         java.util.concurrent.CountDownLatch loaded = new java.util.concurrent.CountDownLatch(1);
@@ -405,7 +411,7 @@ public class TexturePickerScreen extends class_437 {
             Thread.currentThread().interrupt();
         }
 
-        mergeSwordPoolIntoHippo(result);
+        mergeSharedSwordPool(result);
         int totalOpts = result.values().stream().mapToInt(List::size).sum();
         final int finalPackCount = packCount;
         final int finalTotalOpts = totalOpts;
@@ -778,20 +784,33 @@ public class TexturePickerScreen extends class_437 {
         return "dead_tube_coral".equals(slot.outputBaseName());
     }
 
-    private static boolean sharesSwordCitPool(SlotDef slot) {
-        return isSwordCitSlot(slot) || isHippoSlot(slot);
+    private static boolean isNetheriteVanillaSwordSlot(SlotDef slot) {
+        return slot.category() == SlotCategory.ITEMS
+            && "netherite_sword".equals(slot.outputBaseName())
+            && slot.vanillaTexture();
     }
 
-    /** After scan, ensure hippo tab lists every sword CIT texture found in other sword slots. */
-    private static void mergeSwordPoolIntoHippo(Map<Integer, List<TextureOption>> result) {
-        if (HIPPO_SLOT < 0) return;
-        List<TextureOption> hippoList = result.get(HIPPO_SLOT);
+    private static boolean sharesSwordCitPool(SlotDef slot) {
+        return isSwordCitSlot(slot) || isHippoSlot(slot) || isNetheriteVanillaSwordSlot(slot);
+    }
+
+    /** After scan, bidirectionally merge textures across all sword CIT pool slots. */
+    private static void mergeSharedSwordPool(Map<Integer, List<TextureOption>> result) {
+        List<Integer> poolSlots = new ArrayList<>();
         for (int si = 0; si < SLOTS.length; si++) {
-            if (si == HIPPO_SLOT || !isSwordCitSlot(SLOTS[si])) continue;
-            for (TextureOption opt : result.getOrDefault(si, List.of())) {
-                if (hippoList.stream().noneMatch(o ->
-                    o.label().equals(opt.label()) && Objects.equals(o.pngEntry(), opt.pngEntry())))
-                    hippoList.add(opt);
+            if (sharesSwordCitPool(SLOTS[si])) poolSlots.add(si);
+        }
+        if (poolSlots.size() < 2) return;
+
+        for (int dest : poolSlots) {
+            List<TextureOption> destList = result.get(dest);
+            for (int src : poolSlots) {
+                if (src == dest) continue;
+                for (TextureOption opt : result.getOrDefault(src, List.of())) {
+                    if (destList.stream().noneMatch(o ->
+                        o.label().equals(opt.label()) && Objects.equals(o.pngEntry(), opt.pngEntry())))
+                        destList.add(opt);
+                }
             }
         }
     }
@@ -1330,6 +1349,8 @@ public class TexturePickerScreen extends class_437 {
                 case ENCHANT_HIT -> "Optional — from textures/particle/ in your packs.";
                 default -> isHippoSlot(slot)
                     ? "Pick any sword CIT texture — outputs textures/block/dead_tube_coral.png."
+                    : isNetheriteVanillaSwordSlot(slot)
+                    ? "Pick any sword CIT texture — outputs textures/item/netherite_sword.png."
                     : "From textures/ folder in your packs.";
             };
             DrawHelper.drawText(ctx, field_22793, hint, LEFT_W + PAD, top + 26, Ui.COL_MUTED, false);
@@ -1452,7 +1473,7 @@ public class TexturePickerScreen extends class_437 {
 
         if (allOpts.isEmpty()) {
             String msg = "No textures found for this slot.";
-            String hint = isHippoSlot(SLOTS[selectedSlot])
+            String hint = sharesSwordCitPool(SLOTS[selectedSlot])
                 ? "Shows sword CIT textures from optifine/cit/ in your packs."
                 : SLOTS[selectedSlot].vanillaTexture()
                 ? "Looks in assets/minecraft/textures/ in your packs."
@@ -1573,7 +1594,7 @@ public class TexturePickerScreen extends class_437 {
 
     // ── Input ─────────────────────────────────────────────────────────────
 
-    @Override
+
     public boolean method_25402(double mx, double my, int button) {
         if (nameDialogOpen && button == 0) {
             int dx = dialogX(), dy = dialogY();
@@ -1593,7 +1614,7 @@ public class TexturePickerScreen extends class_437 {
         }
 
         // Buttons + text fields first
-        if (super.method_25402(mx, my, button)) return true;
+        if (InputCompat.delegateToChildren(this, mx, my, button)) return true;
         if (button != 0) return false;
 
         if (mx >= PAD && mx <= PAD + 18 && my >= 8 && my <= HEADER - 8) {
