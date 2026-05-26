@@ -1,0 +1,273 @@
+﻿{
+    "version":  1,
+    "generated_at":  "2026-05-26T23:42:40.3498581Z",
+    "source":  "tools/generate-texture-catalog.ps1",
+    "packs":  [
+                  {
+                      "id":  "summer",
+                      "name":  "Summer",
+                      "textures":  [
+                                       {
+                                           "category":  "swords",
+                                           "key":  "pro_sword",
+                                           "label":  "Pro Sword",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/summer/swords/pro_sword.png"
+                                       },
+                                       {
+                                           "category":  "swords",
+                                           "key":  "good_sword",
+                                           "label":  "Good Sword",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/summer/swords/good_sword.png"
+                                       },
+                                       {
+                                           "category":  "swords",
+                                           "key":  "noob_sword",
+                                           "label":  "Noob Sword",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/summer/swords/noob_sword.png"
+                                       },
+                                       {
+                                           "category":  "swords",
+                                           "key":  "perfect_sword",
+                                           "label":  "Perfect Sword",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/summer/swords/perfect_sword.png",
+                                           "mcmeta":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/summer/swords/perfect_sword.png.mcmeta"
+                                       },
+                                       {
+                                           "category":  "swords",
+                                           "key":  "warden_sword",
+                                           "label":  "Warden Sword",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/summer/swords/warden_sword.png",
+                                           "mcmeta":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/summer/swords/warden_sword.png.mcmeta"
+                                       }
+                                   ]
+                  },
+                  {
+                      "id":  "fallen-snow",
+                      "name":  "Fallen Snow",
+                      "textures":  [
+                                       {
+                                           "category":  "swords",
+                                           "key":  "pro_sword",
+                                           "label":  "Pro Sword",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/fallen-snow/swords/pro_sword.png"
+                                       },
+                                       {
+                                           "category":  "swords",
+                                           "key":  "good_sword",
+                                           "label":  "Good Sword",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/fallen-snow/swords/good_sword.png"
+                                       },
+                                       {
+                                           "category":  "swords",
+                                           "key":  "noob_sword",
+                                           "label":  "Noob Sword",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/fallen-snow/swords/noob_sword.png"
+                                       },
+                                       {
+                                           "category":  "swords",
+                                           "key":  "perfect_sword",
+                                           "label":  "Perfect Sword",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/fallen-snow/swords/perfect_sword.png"
+                                       }
+                                   ]
+                  },
+                  {
+                      "id":  "blossom",
+                      "name":  "Blossom",
+                      "textures":  [
+                                       {
+                                           "category":  "swords",
+                                           "key":  "pro_sword",
+                                           "label":  "Pro Sword",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/blossom/swords/pro_sword.png"
+                                       },
+                                       {
+                                           "category":  "swords",
+                                           "key":  "good_sword",
+                                           "label":  "Good Sword",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/blossom/swords/good_sword.png"
+                                       },
+                                       {
+                                           "category":  "swords",
+                                           "key":  "noob_sword",
+                                           "label":  "Noob Sword",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/blossom/swords/noob_sword.png"
+                                       },
+                                       {
+                                           "category":  "swords",
+                                           "key":  "perfect_sword",
+                                           "label":  "Perfect Sword",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/blossom/swords/perfect_sword.png"
+                                       }
+                                   ]
+                  },
+                  {
+                      "id":  "slothys-pink",
+                      "name":  "Slothy\u0027s Pink",
+                      "textures":  [
+                                       {
+                                           "category":  "swords",
+                                           "key":  "kb_sword_2",
+                                           "label":  "Kb Sword 2",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/slothys-pink/swords/kb_sword_2.png"
+                                       },
+                                       {
+                                           "category":  "swords",
+                                           "key":  "adzy_sword",
+                                           "label":  "Adzy Sword",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/slothys-pink/swords/adzy_sword.png"
+                                       },
+                                       {
+                                           "category":  "swords",
+                                           "key":  "bull_sword",
+                                           "label":  "Bull Sword",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/slothys-pink/swords/bull_sword.png"
+                                       },
+                                       {
+                                           "category":  "swords",
+                                           "key":  "heydood_sword",
+                                           "label":  "Heydood Sword",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/slothys-pink/swords/heydood_sword.png"
+                                       },
+                                       {
+                                           "category":  "swords",
+                                           "key":  "mtn_sword",
+                                           "label":  "Mtn Sword",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/slothys-pink/swords/mtn_sword.png"
+                                       },
+                                       {
+                                           "category":  "swords",
+                                           "key":  "ox_sword",
+                                           "label":  "Ox Sword",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/slothys-pink/swords/ox_sword.png"
+                                       },
+                                       {
+                                           "category":  "swords",
+                                           "key":  "skuhoo_sword",
+                                           "label":  "Skuhoo Sword",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/slothys-pink/swords/skuhoo_sword.png"
+                                       },
+                                       {
+                                           "category":  "swords",
+                                           "key":  "smi_sword",
+                                           "label":  "Smi Sword",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/slothys-pink/swords/smi_sword.png"
+                                       },
+                                       {
+                                           "category":  "swords",
+                                           "key":  "steak_sword",
+                                           "label":  "Steak Sword",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/slothys-pink/swords/steak_sword.png"
+                                       },
+                                       {
+                                           "category":  "swords",
+                                           "key":  "steve_sword",
+                                           "label":  "Steve Sword",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/slothys-pink/swords/steve_sword.png"
+                                       },
+                                       {
+                                           "category":  "swords",
+                                           "key":  "wemb_sword",
+                                           "label":  "Wemb Sword",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/slothys-pink/swords/wemb_sword.png"
+                                       },
+                                       {
+                                           "category":  "swords",
+                                           "key":  "ascalon_sword",
+                                           "label":  "Ascalon Sword",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/slothys-pink/swords/ascalon_sword.png"
+                                       },
+                                       {
+                                           "category":  "swords",
+                                           "key":  "garama_sword",
+                                           "label":  "Garama Sword",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/slothys-pink/swords/garama_sword.png"
+                                       },
+                                       {
+                                           "category":  "swords",
+                                           "key":  "kalros_sword",
+                                           "label":  "Kalros Sword",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/slothys-pink/swords/kalros_sword.png"
+                                       },
+                                       {
+                                           "category":  "swords",
+                                           "key":  "bayonet",
+                                           "label":  "Bayonet",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/slothys-pink/swords/bayonet.png"
+                                       }
+                                   ]
+                  },
+                  {
+                      "id":  "warden",
+                      "name":  "Warden",
+                      "textures":  [
+                                       {
+                                           "category":  "swords",
+                                           "key":  "pro_sword",
+                                           "label":  "Pro Sword",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/warden/swords/pro_sword.png"
+                                       },
+                                       {
+                                           "category":  "swords",
+                                           "key":  "good_sword",
+                                           "label":  "Good Sword",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/warden/swords/good_sword.png"
+                                       },
+                                       {
+                                           "category":  "swords",
+                                           "key":  "noob_sword",
+                                           "label":  "Noob Sword",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/warden/swords/noob_sword.png"
+                                       },
+                                       {
+                                           "category":  "swords",
+                                           "key":  "perfect_sword",
+                                           "label":  "Perfect Sword",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/warden/swords/perfect_sword.png"
+                                       },
+                                       {
+                                           "category":  "swords",
+                                           "key":  "warden_sword",
+                                           "label":  "Warden Sword",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/warden/swords/warden_sword.png"
+                                       }
+                                   ]
+                  },
+                  {
+                      "id":  "timevault",
+                      "name":  "TimeVault",
+                      "textures":  [
+                                       {
+                                           "category":  "swords",
+                                           "key":  "pro_sword",
+                                           "label":  "Pro Sword",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/timevault/swords/pro_sword.png"
+                                       },
+                                       {
+                                           "category":  "swords",
+                                           "key":  "good_sword",
+                                           "label":  "Good Sword",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/timevault/swords/good_sword.png"
+                                       },
+                                       {
+                                           "category":  "swords",
+                                           "key":  "noob_sword",
+                                           "label":  "Noob Sword",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/timevault/swords/noob_sword.png"
+                                       },
+                                       {
+                                           "category":  "swords",
+                                           "key":  "perfect_sword",
+                                           "label":  "Perfect Sword",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/timevault/swords/perfect_sword.png"
+                                       },
+                                       {
+                                           "category":  "swords",
+                                           "key":  "warden_sword",
+                                           "label":  "Warden Sword",
+                                           "png":  "https://ilyslothy.github.io/Slothy-s-Tree/textures/timevault/swords/warden_sword.png"
+                                       }
+                                   ]
+                  }
+              ]
+}

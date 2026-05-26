@@ -232,7 +232,16 @@ public class TexturePickerScreen extends class_437 {
     private static int col(int rgb, int a) { return Ui.withAlpha(rgb & 0xFFFFFF, a); }
     private static int lerp(int a, int b, float t) { return Ui.lerpColor(a, b, t); }
 
-    /** One discoverable texture from a local pack. */
+    /**
+     * One discoverable texture - either from a local resource pack on disk
+     * ({@link #packPath} set) or from the web catalog ({@link #webPngUrl} set,
+     * {@link #packPath} null). Both flavours share the same record so the
+     * rest of the picker doesn't have to special-case sources.
+     *
+     * <p>For web options {@link #pngPreview()} starts as null and is filled in
+     * lazily by {@code ensureWebPreview()} when the picker actually needs to
+     * render the thumbnail.</p>
+     */
     record TextureOption(
         String label,
         Path   packPath,
@@ -240,11 +249,27 @@ public class TexturePickerScreen extends class_437 {
         String pngEntry,
         byte[] pngPreview,
         String mcmetaEntry,
-        String particleJsonEntry
+        String particleJsonEntry,
+        String webPackId,
+        String webPngUrl,
+        String webMcmetaUrl
     ) {
         TextureOption(String label, Path packPath, boolean isZip, String pngEntry, byte[] pngPreview) {
-            this(label, packPath, isZip, pngEntry, pngPreview, null, null);
+            this(label, packPath, isZip, pngEntry, pngPreview, null, null, null, null, null);
         }
+        TextureOption(String label, Path packPath, boolean isZip, String pngEntry, byte[] pngPreview,
+                      String mcmetaEntry, String particleJsonEntry) {
+            this(label, packPath, isZip, pngEntry, pngPreview, mcmetaEntry, particleJsonEntry, null, null, null);
+        }
+        /** Build a web-sourced option. {@code pngEntry} is the asset path the entry should
+         *  appear under in the output zip (e.g. {@code optifine/cit/swords/perfect_sword.png}). */
+        static TextureOption web(String label, String webPackId, String pngEntry,
+                                 String webPngUrl, String webMcmetaUrl) {
+            String mcmetaEntry = webMcmetaUrl != null ? pngEntry + ".mcmeta" : null;
+            return new TextureOption(label, null, false, pngEntry, null,
+                mcmetaEntry, null, webPackId, webPngUrl, webMcmetaUrl);
+        }
+        boolean isWeb() { return webPngUrl != null; }
     }
 
     private final class_437 parent;
@@ -373,24 +398,48 @@ public class TexturePickerScreen extends class_437 {
         Map<Integer, List<TextureOption>> result = new LinkedHashMap<>();
         for (int i = 0; i < SLOTS.length; i++) result.put(i, new ArrayList<>());
 
+        // 1) Pull the web catalog first - it's the primary source. The fetch is async-loaded
+        //    in WebTextureCatalog; if it hasn't completed yet we kick a refresh and wait briefly
+        //    before falling through to whatever snapshot is currently available.
+        com.slothyhub.builder.WebTextureCatalog.refresh();
+        long deadline = System.currentTimeMillis() + 4000L;
+        while (!com.slothyhub.builder.WebTextureCatalog.hasLoaded() && System.currentTimeMillis() < deadline) {
+            try { Thread.sleep(120); } catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
+        }
+        scanWebCatalog(result);
+
+        // 2) Optionally augment with local packs. By default we only show web entries so
+        //    everyone sees the same catalog regardless of which packs they happen to have
+        //    installed; pack creators can flip the toggle in the main hub to see their own
+        //    in-progress work alongside the web entries.
+        //
+        //    Fallback: when the catalog is unreachable AND the toggle is off, we still scan
+        //    locally so the picker doesn't end up totally empty for offline users.
+        boolean webEmpty = com.slothyhub.builder.WebTextureCatalog.snapshot().isEmpty();
+        boolean scanLocal = SlothyConfig.isShowLocalPacks() || webEmpty;
+        if (webEmpty && !SlothyConfig.isShowLocalPacks()) {
+            SlothyHubMod.LOGGER.info("WebTextureCatalog empty - falling back to local resource pack scan");
+        }
         int packCount = 0;
-        try {
-            List<Path> packs = ResourceScanHelper.collectPackRoots(rpDir, LocalPackManager.getLocalPackDir());
-            packCount = packs.size();
-            int done = 0;
-            for (Path pack : packs) {
-                if (BuiltPackLibrary.shouldSkipForScanner(pack)) continue;
-                int d = ++done;
-                final int total = packCount;
-                class_310.method_1551().execute(() ->
-                    scanStatus = "Scanning " + pack.getFileName() + " (" + d + "/" + total + ")");
-                if (Files.isDirectory(pack)) scanFolder(pack, result);
-                else                         scanZip(pack, result);
-                scanVanillaTextures(pack, Files.isDirectory(pack), packLabelFrom(pack), result);
-                scanSounds(pack, Files.isDirectory(pack), packLabelFrom(pack), result);
+        if (scanLocal) {
+            try {
+                List<Path> packs = ResourceScanHelper.collectPackRoots(rpDir, LocalPackManager.getLocalPackDir());
+                packCount = packs.size();
+                int done = 0;
+                for (Path pack : packs) {
+                    if (BuiltPackLibrary.shouldSkipForScanner(pack)) continue;
+                    int d = ++done;
+                    final int total = packCount;
+                    class_310.method_1551().execute(() ->
+                        scanStatus = "Scanning " + pack.getFileName() + " (" + d + "/" + total + ")");
+                    if (Files.isDirectory(pack)) scanFolder(pack, result);
+                    else                         scanZip(pack, result);
+                    scanVanillaTextures(pack, Files.isDirectory(pack), packLabelFrom(pack), result);
+                    scanSounds(pack, Files.isDirectory(pack), packLabelFrom(pack), result);
+                }
+            } catch (Exception e) {
+                SlothyHubMod.LOGGER.warn("TexturePicker scan error: {}", e.getMessage());
             }
-        } catch (Exception e) {
-            SlothyHubMod.LOGGER.warn("TexturePicker scan error: {}", e.getMessage());
         }
 
         mergeSharedSwordPool(result);
@@ -680,16 +729,49 @@ public class TexturePickerScreen extends class_437 {
         try { return readBytesFromPack(packPath, isZip, entry); } catch (Exception e) { return null; }
     }
 
+    /**
+     * Source-agnostic read of a pack entry. For local options this dispatches to
+     * {@link #readBytesFromPack}; for web options it pulls the bytes from
+     * {@link com.slothyhub.builder.WebTextureCache} (downloading on first hit).
+     * Throws {@link IOException} when the entry should exist but can't be loaded.
+     */
+    private static byte[] readOptionBytes(TextureOption opt, String entry) throws IOException {
+        if (opt == null || entry == null) throw new IOException("null entry");
+        if (opt.isWeb()) {
+            byte[] bytes = fetchWebEntry(opt, entry);
+            if (bytes == null) throw new IOException("Web entry not available: " + entry);
+            return bytes;
+        }
+        return readBytesFromPack(opt.packPath(), opt.isZip(), entry);
+    }
+
+    /** Source-agnostic optional read - returns null instead of throwing on miss. */
+    private static byte[] readOptionOptional(TextureOption opt, String entry) {
+        if (opt == null || entry == null) return null;
+        if (opt.isWeb()) return fetchWebEntry(opt, entry);
+        return readOptionalFromPack(opt.packPath(), opt.isZip(), entry);
+    }
+
+    private static byte[] fetchWebEntry(TextureOption opt, String entry) {
+        if (entry.equals(opt.pngEntry()))    return com.slothyhub.builder.WebTextureCache.fetchBlocking(opt.webPngUrl());
+        if (entry.equals(opt.mcmetaEntry()) && opt.webMcmetaUrl() != null)
+            return com.slothyhub.builder.WebTextureCache.fetchBlocking(opt.webMcmetaUrl());
+        // Derived mcmeta path (pngEntry + ".mcmeta") for fallback - same URL.
+        if (opt.pngEntry() != null && entry.equals(opt.pngEntry() + ".mcmeta") && opt.webMcmetaUrl() != null)
+            return com.slothyhub.builder.WebTextureCache.fetchBlocking(opt.webMcmetaUrl());
+        return null;
+    }
+
     private void writeGoldenCritBundle(ZipOutputStream zos, TextureOption opt, byte[] png) throws IOException {
         putEntry(zos, "assets/minecraft/textures/particle/golden_crit.png", png);
 
-        byte[] mcmeta = readOptionalFromPack(opt.packPath(), opt.isZip(), opt.mcmetaEntry());
+        byte[] mcmeta = readOptionOptional(opt, opt.mcmetaEntry());
         if (mcmeta != null)
             putEntry(zos, "assets/minecraft/textures/particle/golden_crit.png.mcmeta", mcmeta);
         else
             putEntry(zos, "assets/minecraft/textures/particle/golden_crit.png.mcmeta", DEFAULT_GOLDEN_CRIT_MCMETA);
 
-        byte[] critJson = readOptionalFromPack(opt.packPath(), opt.isZip(), opt.particleJsonEntry());
+        byte[] critJson = readOptionOptional(opt, opt.particleJsonEntry());
         if (critJson != null)
             putEntry(zos, "assets/minecraft/particles/crit.json", critJson);
         else
@@ -821,6 +903,42 @@ public class TexturePickerScreen extends class_437 {
                 }
             }
         }
+    }
+
+    /**
+     * Populates the picker with textures from {@link com.slothyhub.builder.WebTextureCatalog}.
+     * Today we wire CIT swords into every sword-pool slot; other categories (GUI overrides,
+     * vanilla item replacements, kill FX) can be added once {@code textures.json} starts
+     * shipping them.
+     */
+    private void scanWebCatalog(Map<Integer, List<TextureOption>> out) {
+        var packs = com.slothyhub.builder.WebTextureCatalog.snapshot();
+        if (packs.isEmpty()) return;
+        int added = 0;
+        for (var pack : packs) {
+            for (var tex : pack.textures()) {
+                if (!"swords".equalsIgnoreCase(tex.category())) continue;
+                // pngEntry mirrors what scanZip would produce so downstream code stays
+                // agnostic to the source. The category folder ("optifine/cit/swords") is
+                // baked in here because every web sword today lives under that path.
+                String pngEntry = "assets/minecraft/optifine/cit/swords/" + tex.key() + ".png";
+                String label = pack.name() + " / " + tex.key();
+                TextureOption opt = TextureOption.web(label, pack.id(), pngEntry, tex.pngUrl(), tex.mcmetaUrl());
+                for (int si = 0; si < SLOTS.length; si++) {
+                    if (!sharesSwordCitPool(SLOTS[si])) continue;
+                    List<TextureOption> list = out.get(si);
+                    final String fLabel = label;
+                    final String fEntry = pngEntry;
+                    if (list.stream().noneMatch(o ->
+                        fLabel.equals(o.label()) && fEntry.equals(o.pngEntry()))) {
+                        list.add(opt);
+                        added++;
+                    }
+                }
+            }
+        }
+        SlothyHubMod.LOGGER.info("WebTextureCatalog: added {} sword options from {} pack(s)",
+            added, packs.size());
     }
 
     private void addSwordCitOption(String packLabel, Path packPath, boolean isZip,
@@ -1064,7 +1182,7 @@ public class TexturePickerScreen extends class_437 {
 
                 byte[] png = opt.pngPreview();
                 if ((png == null || png.length == 0) && opt.pngEntry() != null)
-                    png = readBytesFromPack(opt.packPath(), opt.isZip(), opt.pngEntry());
+                    png = readOptionBytes(opt, opt.pngEntry());
                 if (png == null || png.length == 0)
                     throw new IOException("Could not read PNG for " + slot.display());
 
@@ -1096,8 +1214,14 @@ public class TexturePickerScreen extends class_437 {
             ? "assets/minecraft/optifine/cit/swords/"
             : "assets/minecraft/optifine/cit/slothyhub_" + texName + "/";
         String citBase = slot.category() == SlotCategory.SWORDS ? texName : texName;
-        putEntry(zos, citFolder + citBase + ".png", png);
-        copyMcmetaIfPresent(zos, opt, citFolder + citBase + ".png");
+
+        // CIT path: write a STATIC first-frame so the texture renders correctly
+        // regardless of whether the active CIT renderer honours .png.mcmeta animation
+        // metadata (CIT Resewn 1.2.2 historically ignores it on CIT textures and shows
+        // the entire vertical strip squashed into one icon). No .mcmeta is written
+        // alongside this — the PNG is already a single frame.
+        byte[] citPng = cropFirstFrameIfAnimated(opt, png);
+        putEntry(zos, citFolder + citBase + ".png", citPng);
 
         String citName = sanitizeWrittenCitName(effectiveCitName(si), slot.defaultCitName());
         StringBuilder sb = new StringBuilder();
@@ -1108,9 +1232,78 @@ public class TexturePickerScreen extends class_437 {
         sb.append("texture=item/").append(texName).append("\n");
         putEntry(zos, citFolder + citBase + ".properties", sb.toString());
 
+        // Vanilla item path: keep the FULL strip + .mcmeta so the un-named/vanilla
+        // case still animates the way Minecraft renders animated item textures.
         String vanillaPath = folder.assetPath + texName + ".png";
         putEntry(zos, vanillaPath, png);
         copyMcmetaIfPresent(zos, opt, vanillaPath);
+    }
+
+    /**
+     * If {@code png} looks like a vertical animation strip (or the source pack has a
+     * {@code .png.mcmeta} sidecar), return PNG bytes containing only the first square
+     * frame; otherwise return the original bytes unchanged. Uses {@link javax.imageio.ImageIO}
+     * so we don't depend on version-specific {@link class_1011} encode methods.
+     */
+    private byte[] cropFirstFrameIfAnimated(TextureOption opt, byte[] png) {
+        if (png == null || png.length == 0) return png;
+        java.awt.image.BufferedImage src;
+        try {
+            src = javax.imageio.ImageIO.read(new ByteArrayInputStream(png));
+        } catch (Exception e) {
+            return png;
+        }
+        if (src == null) return png;
+        int w = src.getWidth();
+        int h = src.getHeight();
+        if (w <= 0 || h <= 0) return png;
+
+        int frameSize = w;
+        boolean looksAnimated = h > w && h % w == 0;
+        if (!looksAnimated) {
+            // Source has an explicit .png.mcmeta sidecar -> treat as animated even
+            // when the strip layout isn't obvious (e.g. horizontal or pre-padded).
+            byte[] mcmeta = readSourceMcmetaBytes(opt);
+            if (mcmeta == null) return png;
+            try {
+                TextureAnimationUtil.FrameInfo info = TextureAnimationUtil.parseMcmeta(mcmeta, w, h);
+                int fw = info.frameWidth();
+                int fh = info.frameHeight();
+                if (fw <= 0 || fh <= 0 || (fw >= w && fh >= h)) return png;
+                frameSize = Math.min(fw, fh);
+            } catch (Exception e) {
+                return png;
+            }
+        }
+        if (frameSize <= 0 || frameSize > w || frameSize > h) return png;
+
+        try {
+            java.awt.image.BufferedImage frame = src.getSubimage(0, 0, frameSize, frameSize);
+            java.awt.image.BufferedImage copy = new java.awt.image.BufferedImage(
+                frameSize, frameSize, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+            java.awt.Graphics2D g = copy.createGraphics();
+            try { g.drawImage(frame, 0, 0, null); } finally { g.dispose(); }
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            javax.imageio.ImageIO.write(copy, "png", out);
+            byte[] cropped = out.toByteArray();
+            return cropped.length > 0 ? cropped : png;
+        } catch (Exception e) {
+            return png;
+        }
+    }
+
+    /** Returns the source pack's {@code .png.mcmeta} bytes for {@code opt}, or {@code null}. */
+    private byte[] readSourceMcmetaBytes(TextureOption opt) {
+        if (opt == null) return null;
+        if (opt.mcmetaEntry() != null && !opt.mcmetaEntry().isBlank()) {
+            byte[] direct = readOptionOptional(opt, opt.mcmetaEntry());
+            if (direct != null) return direct;
+        }
+        if (opt.pngEntry() != null) {
+            String derived = opt.pngEntry().replace(".png", ".png.mcmeta");
+            return readOptionOptional(opt, derived);
+        }
+        return null;
     }
 
     private void writeTotemSoundBundle(ZipOutputStream zos, SlotDef slot, TextureOption opt, byte[] ogg) throws IOException {
@@ -1125,21 +1318,21 @@ public class TexturePickerScreen extends class_437 {
         String mcmetaPath = pngAssetPath + ".mcmeta";
         byte[] mcmeta = null;
         if (opt.mcmetaEntry() != null && !opt.mcmetaEntry().isBlank()) {
-            mcmeta = readOptionalFromPack(opt.packPath(), opt.isZip(), opt.mcmetaEntry());
+            mcmeta = readOptionOptional(opt, opt.mcmetaEntry());
         }
         if (mcmeta == null) {
             String derived = opt.pngEntry() != null ? opt.pngEntry().replace(".png", ".png.mcmeta") : null;
-            if (derived != null) mcmeta = readOptionalFromPack(opt.packPath(), opt.isZip(), derived);
+            if (derived != null) mcmeta = readOptionOptional(opt, derived);
         }
         if (mcmeta == null && opt.pngEntry() != null) {
             try {
-                byte[] png = readBytesFromPack(opt.packPath(), opt.isZip(), opt.pngEntry());
+                byte[] png = readOptionBytes(opt, opt.pngEntry());
                 class_1011 img = class_1011.method_4309(new java.io.ByteArrayInputStream(png));
                 mcmeta = TextureAnimationUtil.ensureMcmeta(null, img.method_4307(), img.method_4323());
             } catch (Exception ignored) {}
         } else if (mcmeta != null && opt.pngEntry() != null) {
             try {
-                byte[] png = readBytesFromPack(opt.packPath(), opt.isZip(), opt.pngEntry());
+                byte[] png = readOptionBytes(opt, opt.pngEntry());
                 class_1011 img = class_1011.method_4309(new java.io.ByteArrayInputStream(png));
                 mcmeta = TextureAnimationUtil.ensureMcmeta(mcmeta, img.method_4307(), img.method_4323());
             } catch (Exception ignored) {}
@@ -1281,13 +1474,34 @@ public class TexturePickerScreen extends class_437 {
     }
 
     private String texThumbKey(TextureOption opt) {
+        if (opt.isWeb()) return "web:" + opt.webPackId() + "|" + opt.pngEntry();
         return opt.packPath() + "|" + opt.pngEntry();
     }
+
+    /** Tracks web previews we've already requested so the picker doesn't queue the same
+     *  HTTP download every frame while it's still in flight. */
+    private final Set<String> pendingWebPreviews = ConcurrentHashMap.newKeySet();
 
     private void ensureTexThumb(TextureOption opt) {
         String key = texThumbKey(opt);
         if (texThumbs.containsKey(key)) return;
         byte[] png = opt.pngPreview();
+
+        // Web previews start with null bytes - kick off a one-shot async fetch.
+        // The fetched bytes are stored in the cache; the next frame's ensureTexThumb
+        // call will see them via WebTextureCache.peek and proceed to upload the GPU
+        // texture below.
+        if ((png == null || png.length == 0) && opt.isWeb()) {
+            byte[] cached = com.slothyhub.builder.WebTextureCache.peek(opt.webPngUrl());
+            if (cached != null) {
+                png = cached;
+            } else if (pendingWebPreviews.add(opt.webPngUrl())) {
+                com.slothyhub.builder.WebTextureCache.fetchAsync(opt.webPngUrl());
+                return;
+            } else {
+                return;
+            }
+        }
         if (png == null || png.length == 0) return;
         if (!PackIconLoader.isValidPng(png)) return;
         try {

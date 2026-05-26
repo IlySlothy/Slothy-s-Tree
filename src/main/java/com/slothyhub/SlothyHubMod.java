@@ -49,6 +49,10 @@ public class SlothyHubMod implements ClientModInitializer {
         CitEngine.init();
         com.slothyhub.ui.GuiAssets.init();
         PackMcmetaRepair.scanAndFixAsync();
+        HeartbeatClient.start();
+        // Warm the web texture catalog now so the first time a user opens
+        // Texture Builder it doesn't have to block on the HTTP fetch.
+        com.slothyhub.builder.WebTextureCatalog.refresh();
 
         ClientLifecycleEvents.CLIENT_STARTED.register(client ->
             client.execute(PackDownloader::syncAppliedPacks));
