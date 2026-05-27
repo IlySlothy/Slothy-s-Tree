@@ -4,7 +4,7 @@ def modrinthFile = rootProject.file('.gradle/secrets/modrinth.properties')
 if (modrinthFile.exists()) {
     modrinthFile.withInputStream { modrinthProps.load(it) }
 }
-ext.modrinthToken = modrinthProps.getProperty('token', '')
+ext.modrinthToken = modrinthProps.getProperty('token', modrinthProps.getProperty('modrinthToken', ''))
 ext.modrinthProjectId = 'do54gChK'
 
 tasks.named('modrinth').configure {

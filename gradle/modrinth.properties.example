@@ -1,0 +1,3 @@
+# Copy to .gradle/secrets/modrinth.properties (git-ignored) and paste your Modrinth PAT.
+# Scopes: Create versions, Read projects
+token=mrp_your_token_here
