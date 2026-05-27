@@ -9,52 +9,43 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Index of CIT / vanilla textures hosted alongside the pack catalog on
- * https://ilyslothy.github.io/Slothy-s-Tree/. Schema:
- * <pre>
- * {
- *   "version": 1,
- *   "generated_at": "ISO8601",
- *   "packs": [
- *     {
- *       "id": "summer",
- *       "name": "Summer",
- *       "textures": [
- *         {
- *           "category": "swords",
- *           "key": "perfect_sword",
- *           "label": "Perfect Sword",
- *           "png": "https://.../textures/summer/swords/perfect_sword.png",
- *           "mcmeta": "https://.../textures/summer/swords/perfect_sword.png.mcmeta"   (optional)
- *         }
- *       ]
- *     }
- *   ]
- * }
- * </pre>
+ * Index of textures hosted on GitHub Pages ({@value #CATALOG_URL}).
  *
- * Lifecycle: {@link #refresh()} runs once per JVM (with an automatic retry on
- * the next call if the previous attempt failed). Callers should use the
- * blocking {@link #snapshot()} which returns the most recently loaded data
- * (or an empty list if nothing has loaded yet).
+ * <p>Each entry has an {@code asset} path (where it lives inside a resource pack),
+ * a remote {@code png} or {@code sound} URL, and optional {@code mcmeta} /
+ * {@code particle_json} sidecars.</p>
  */
 public final class WebTextureCatalog {
 
     public record WebPack(String id, String name, List<WebTexture> textures) {}
 
-    /** A single texture entry inside a web pack. */
     public record WebTexture(
-        String category,     // e.g. "swords"
-        String key,          // e.g. "perfect_sword"
-        String label,        // human-friendly, e.g. "Perfect Sword"
-        String pngUrl,       // absolute URL
-        String mcmetaUrl     // absolute URL, may be null
-    ) {}
+        String category,
+        String key,
+        String label,
+        String assetPath,
+        String pngUrl,
+        String mcmetaUrl,
+        String particleJsonUrl,
+        String soundUrl
+    ) {
+        /** Primary download URL (PNG or OGG). */
+        public String dataUrl() {
+            if (pngUrl != null && !pngUrl.isBlank()) return pngUrl;
+            return soundUrl;
+        }
+
+        public boolean isSound() {
+            return soundUrl != null && !soundUrl.isBlank()
+                && (pngUrl == null || pngUrl.isBlank());
+        }
+    }
 
     public static final String CATALOG_URL =
         "https://ilyslothy.github.io/Slothy-s-Tree/textures.json";
@@ -71,17 +62,12 @@ public final class WebTextureCatalog {
 
     private WebTextureCatalog() {}
 
-    /** Returns the latest loaded snapshot. Never null. */
     public static List<WebPack> snapshot() {
         return CACHED.get();
     }
 
     public static boolean hasLoaded() { return loadedOk; }
 
-    /**
-     * Kicks off a refresh on a background thread if no successful load has
-     * happened yet, or the last attempt failed at least {@value RETRY_BACKOFF_MS}ms ago.
-     */
     public static void refresh() {
         long now = System.currentTimeMillis();
         if (loadedOk) return;
@@ -94,11 +80,12 @@ public final class WebTextureCatalog {
         try {
             byte[] bytes = WebTextureCache.fetchBlocking(CATALOG_URL);
             if (bytes == null || bytes.length == 0) {
-                SlothyHubMod.LOGGER.info("WebTextureCatalog: textures.json not reachable - using empty catalog");
+                SlothyHubMod.LOGGER.info("WebTextureCatalog: textures.json not reachable");
                 CACHED.set(List.of());
                 return;
             }
             String json = new String(bytes, StandardCharsets.UTF_8);
+            if (!json.isEmpty() && json.charAt(0) == '\uFEFF') json = json.substring(1);
             JsonObject root = JsonParser.parseString(json).getAsJsonObject();
             List<WebPack> packs = new ArrayList<>();
             JsonArray packArr = root.has("packs") ? root.getAsJsonArray("packs") : new JsonArray();
@@ -114,22 +101,42 @@ public final class WebTextureCatalog {
                     String category = to.has("category") ? to.get("category").getAsString() : "swords";
                     String key = to.has("key") ? to.get("key").getAsString() : null;
                     String label = to.has("label") ? to.get("label").getAsString() : key;
-                    String pngUrl = to.has("png") ? to.get("png").getAsString() : null;
-                    String mcmetaUrl = to.has("mcmeta") && !to.get("mcmeta").isJsonNull()
-                        ? to.get("mcmeta").getAsString() : null;
-                    if (key == null || pngUrl == null) continue;
-                    textures.add(new WebTexture(category, key, label, pngUrl, mcmetaUrl));
+                    String assetPath = to.has("asset") ? to.get("asset").getAsString() : null;
+                    String pngUrl = optString(to, "png");
+                    String soundUrl = optString(to, "sound");
+                    String mcmetaUrl = optString(to, "mcmeta");
+                    String particleJsonUrl = optString(to, "particle_json");
+                    if (key == null) continue;
+                    if (assetPath == null || assetPath.isBlank()) {
+                        assetPath = "assets/minecraft/optifine/cit/swords/" + key + ".png";
+                    }
+                    if ((pngUrl == null || pngUrl.isBlank()) && (soundUrl == null || soundUrl.isBlank()))
+                        continue;
+                    textures.add(new WebTexture(category, key, label, assetPath,
+                        pngUrl, mcmetaUrl, particleJsonUrl, soundUrl));
                 }
                 packs.add(new WebPack(id, name, Collections.unmodifiableList(textures)));
             }
             CACHED.set(Collections.unmodifiableList(packs));
             loadedOk = true;
-            SlothyHubMod.LOGGER.info("WebTextureCatalog: loaded {} packs ({} textures total) from {}",
+            SlothyHubMod.LOGGER.info("WebTextureCatalog: loaded {} packs ({} entries) from {}",
                 packs.size(),
                 packs.stream().mapToInt(p -> p.textures().size()).sum(),
                 CATALOG_URL);
         } catch (Exception ex) {
             SlothyHubMod.LOGGER.warn("WebTextureCatalog: failed to load {}: {}", CATALOG_URL, ex.getMessage());
         }
+    }
+
+    private static String optString(JsonObject o, String field) {
+        if (!o.has(field) || o.get(field).isJsonNull()) return null;
+        String s = o.get(field).getAsString();
+        return (s == null || s.isBlank()) ? null : s;
+    }
+
+    /** Map catalog category string to picker {@code SlotCategory}, or null. */
+    public static String normalizeCategory(String category) {
+        if (category == null) return "";
+        return category.toLowerCase(Locale.ROOT);
     }
 }

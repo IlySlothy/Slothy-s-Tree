@@ -1,6 +1,9 @@
 plugins {
     id 'base'
+    id 'com.modrinth.minotaur' version '2.8.10'
 }
+
+apply from: rootProject.file('gradle/modrinth.gradle')
 
 version = '1.0.3-mc1.21.11'
 group = project.maven_group
@@ -33,6 +36,18 @@ tasks.register('sourcesJar', Jar) {
 
 tasks.named('assemble') {
     dependsOn tasks.named('remapJar')
+}
+
+modrinth {
+    token = rootProject.ext.modrinthToken
+    projectId = rootProject.ext.modrinthProjectId
+    versionNumber = "${project.version}+${new Date().format('yyyyMMddHHmm')}"
+    versionName = "SlothyHub ${project.version}"
+    versionType = 'release'
+    changelog = 'SlothyHub release for Minecraft 1.21.9–1.21.11 (Fabric).'
+    uploadFile = tasks.named('remapJar')
+    gameVersions = ['1.21.9', '1.21.10', '1.21.11']
+    loaders = ['fabric']
 }
 
 artifacts {

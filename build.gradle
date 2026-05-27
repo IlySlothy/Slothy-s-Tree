@@ -1,7 +1,10 @@
 plugins {
     id 'fabric-loom' version "${loom_version}"
     id 'maven-publish'
+    id 'com.modrinth.minotaur' version '2.8.10'
 }
+
+apply from: 'gradle/modrinth.gradle'
 
 version = project.mod_version
 group = project.maven_group
@@ -65,9 +68,31 @@ jar {
 // slothyhub-1.21.11 = main hub only for MC 1.21.9–1.21.11; slothyhub-cit = CIT companion.
 def featherMods111 = 'C:/Users/newbr/AppData/Roaming/.feather/user-mods/1.21.11-fabric'
 
+modrinth {
+    token = rootProject.ext.modrinthToken
+    projectId = rootProject.ext.modrinthProjectId
+    versionNumber = "${project.version}+${new Date().format('yyyyMMddHHmm')}"
+    versionName = "SlothyHub ${project.version}"
+    versionType = 'release'
+    changelog = 'SlothyHub release for Minecraft 1.21.8 (Fabric).'
+    uploadFile = tasks.remapJar
+    gameVersions = ['1.21.8']
+    loaders = ['fabric']
+}
+
+tasks.register('publishModrinth') {
+    group = 'publishing'
+    description = 'Upload all three SlothyHub jars to Modrinth (needs .gradle/secrets/modrinth.properties)'
+    dependsOn 'modrinth',
+        ':slothyhub-1.21.11:modrinth',
+        ':slothyhub-legacy-1.21.4:modrinth'
+}
+
 tasks.register('buildAll') {
     dependsOn tasks.named('build'), project(':legacy-cit').tasks.named('build'),
-        project(':modern-cit').tasks.named('build'), project(':slothyhub-1.21.11').tasks.named('assemble')
+        project(':modern-cit').tasks.named('build'),
+        project(':slothyhub-1.21.11').tasks.named('assemble'),
+        project(':slothyhub-legacy-1.21.4').tasks.named('assemble')
 }
 
 tasks.register('copyFeatherMods111') {

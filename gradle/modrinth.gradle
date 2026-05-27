@@ -1,0 +1,18 @@
+// Shared Modrinth Minotaur settings (apply after the minotaur plugin).
+def modrinthProps = new Properties()
+def modrinthFile = rootProject.file('.gradle/secrets/modrinth.properties')
+if (modrinthFile.exists()) {
+    modrinthFile.withInputStream { modrinthProps.load(it) }
+}
+ext.modrinthToken = modrinthProps.getProperty('token', '')
+ext.modrinthProjectId = 'do54gChK'
+
+tasks.named('modrinth').configure {
+    onlyIf { !rootProject.ext.modrinthToken.isBlank() }
+    doFirst {
+        if (rootProject.ext.modrinthToken.isBlank()) {
+            throw new GradleException(
+                'Modrinth token missing. Create .gradle/secrets/modrinth.properties with token=mrp_...')
+        }
+    }
+}

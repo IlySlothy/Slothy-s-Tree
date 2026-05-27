@@ -1,0 +1,71 @@
+plugins {
+    id 'base'
+    id 'com.modrinth.minotaur' version '2.8.10'
+}
+
+apply from: rootProject.file('gradle/modrinth.gradle')
+
+// Legacy repackage of the v1.0.3 main jar with a fabric.mod.json that targets
+// MC 1.20 through 1.21.1 (the range that pre-dates the new class_10442/10444
+// renderer APIs and the GpuTexture rework). The same compiled bytecode the
+// MC 1.21.8 build uses is shipped here; runtime guards inside CitEngine and
+// DrawHelper skip code paths that need newer APIs on older MC versions.
+//
+// External-CIT detection is reordered to fire first inside CitEngine.init(),
+// so the bundled CIT engine never registers when CIT Resewn (or chime, etc.)
+// is present in the mods folder - this avoids the double-handler crashes seen
+// on MC 1.21.1 with CIT Resewn installed.
+
+version = '1.0.3-mc1.20-1.21.1'
+group = project.maven_group
+
+tasks.register('remapJar', Jar) {
+    dependsOn rootProject.tasks.named('remapJar')
+    archiveBaseName.set('slothyhub')
+    archiveVersion.set(version)
+    destinationDirectory.set(layout.buildDirectory.dir('libs'))
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    from(zipTree(rootProject.tasks.named('remapJar').get().archiveFile)) {
+        exclude 'fabric.mod.json'
+        exclude 'META-INF/MANIFEST.MF'
+    }
+    from('src/main/resources') {
+        include 'fabric.mod.json'
+        expand 'version': version
+    }
+}
+
+tasks.register('sourcesJar', Jar) {
+    dependsOn rootProject.tasks.named('sourcesJar')
+    archiveClassifier.set('sources')
+    archiveBaseName.set('slothyhub')
+    archiveVersion.set(version)
+    destinationDirectory.set(layout.buildDirectory.dir('libs'))
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from(zipTree(rootProject.tasks.named('sourcesJar').get().archiveFile))
+}
+
+tasks.named('assemble') {
+    dependsOn tasks.named('remapJar')
+}
+
+modrinth {
+    token = rootProject.ext.modrinthToken
+    projectId = rootProject.ext.modrinthProjectId
+    versionNumber = "${project.version}+${new Date().format('MMddHHmm')}"
+    versionName = "SlothyHub ${project.version}"
+    versionType = 'release'
+    changelog = 'SlothyHub legacy release for Minecraft 1.20–1.21.1 (Fabric).'
+    uploadFile = tasks.named('remapJar')
+    gameVersions = [
+        '1.20', '1.20.1', '1.20.2', '1.20.3', '1.20.4', '1.20.5', '1.20.6',
+        '1.21', '1.21.1'
+    ]
+    loaders = ['fabric']
+}
+
+artifacts {
+    archives tasks.named('remapJar')
+    archives tasks.named('sourcesJar')
+}

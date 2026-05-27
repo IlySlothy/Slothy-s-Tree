@@ -251,25 +251,26 @@ public class TexturePickerScreen extends class_437 {
         String mcmetaEntry,
         String particleJsonEntry,
         String webPackId,
-        String webPngUrl,
-        String webMcmetaUrl
+        String webDataUrl,
+        String webMcmetaUrl,
+        String webParticleJsonUrl
     ) {
         TextureOption(String label, Path packPath, boolean isZip, String pngEntry, byte[] pngPreview) {
-            this(label, packPath, isZip, pngEntry, pngPreview, null, null, null, null, null);
+            this(label, packPath, isZip, pngEntry, pngPreview, null, null, null, null, null, null);
         }
         TextureOption(String label, Path packPath, boolean isZip, String pngEntry, byte[] pngPreview,
                       String mcmetaEntry, String particleJsonEntry) {
-            this(label, packPath, isZip, pngEntry, pngPreview, mcmetaEntry, particleJsonEntry, null, null, null);
+            this(label, packPath, isZip, pngEntry, pngPreview, mcmetaEntry, particleJsonEntry, null, null, null, null);
         }
-        /** Build a web-sourced option. {@code pngEntry} is the asset path the entry should
-         *  appear under in the output zip (e.g. {@code optifine/cit/swords/perfect_sword.png}). */
-        static TextureOption web(String label, String webPackId, String pngEntry,
-                                 String webPngUrl, String webMcmetaUrl) {
-            String mcmetaEntry = webMcmetaUrl != null ? pngEntry + ".mcmeta" : null;
-            return new TextureOption(label, null, false, pngEntry, null,
-                mcmetaEntry, null, webPackId, webPngUrl, webMcmetaUrl);
+        /** Build a web-sourced option; {@code assetEntry} is the in-pack path (PNG or OGG). */
+        static TextureOption web(String label, String webPackId, String assetEntry,
+                                 String dataUrl, String mcmetaUrl, String particleJsonUrl) {
+            String mcmetaEntry = mcmetaUrl != null ? assetEntry + ".mcmeta" : null;
+            String particleEntry = particleJsonUrl != null ? "assets/minecraft/particles/crit.json" : null;
+            return new TextureOption(label, null, false, assetEntry, null,
+                mcmetaEntry, particleEntry, webPackId, dataUrl, mcmetaUrl, particleJsonUrl);
         }
-        boolean isWeb() { return webPngUrl != null; }
+        boolean isWeb() { return webDataUrl != null; }
     }
 
     private final class_437 parent;
@@ -753,10 +754,12 @@ public class TexturePickerScreen extends class_437 {
     }
 
     private static byte[] fetchWebEntry(TextureOption opt, String entry) {
-        if (entry.equals(opt.pngEntry()))    return com.slothyhub.builder.WebTextureCache.fetchBlocking(opt.webPngUrl());
-        if (entry.equals(opt.mcmetaEntry()) && opt.webMcmetaUrl() != null)
+        if (entry.equals(opt.pngEntry()) && opt.webDataUrl() != null)
+            return com.slothyhub.builder.WebTextureCache.fetchBlocking(opt.webDataUrl());
+        if (opt.mcmetaEntry() != null && entry.equals(opt.mcmetaEntry()) && opt.webMcmetaUrl() != null)
             return com.slothyhub.builder.WebTextureCache.fetchBlocking(opt.webMcmetaUrl());
-        // Derived mcmeta path (pngEntry + ".mcmeta") for fallback - same URL.
+        if (opt.particleJsonEntry() != null && entry.equals(opt.particleJsonEntry()) && opt.webParticleJsonUrl() != null)
+            return com.slothyhub.builder.WebTextureCache.fetchBlocking(opt.webParticleJsonUrl());
         if (opt.pngEntry() != null && entry.equals(opt.pngEntry() + ".mcmeta") && opt.webMcmetaUrl() != null)
             return com.slothyhub.builder.WebTextureCache.fetchBlocking(opt.webMcmetaUrl());
         return null;
@@ -906,10 +909,8 @@ public class TexturePickerScreen extends class_437 {
     }
 
     /**
-     * Populates the picker with textures from {@link com.slothyhub.builder.WebTextureCatalog}.
-     * Today we wire CIT swords into every sword-pool slot; other categories (GUI overrides,
-     * vanilla item replacements, kill FX) can be added once {@code textures.json} starts
-     * shipping them.
+     * Populates the picker from {@link com.slothyhub.builder.WebTextureCatalog} for every
+     * slot category (swords, GUI, particles, items, kill FX, sounds).
      */
     private void scanWebCatalog(Map<Integer, List<TextureOption>> out) {
         var packs = com.slothyhub.builder.WebTextureCatalog.snapshot();
@@ -917,28 +918,102 @@ public class TexturePickerScreen extends class_437 {
         int added = 0;
         for (var pack : packs) {
             for (var tex : pack.textures()) {
-                if (!"swords".equalsIgnoreCase(tex.category())) continue;
-                // pngEntry mirrors what scanZip would produce so downstream code stays
-                // agnostic to the source. The category folder ("optifine/cit/swords") is
-                // baked in here because every web sword today lives under that path.
-                String pngEntry = "assets/minecraft/optifine/cit/swords/" + tex.key() + ".png";
-                String label = pack.name() + " / " + tex.key();
-                TextureOption opt = TextureOption.web(label, pack.id(), pngEntry, tex.pngUrl(), tex.mcmetaUrl());
+                String asset = tex.assetPath();
+                if (asset == null || asset.isBlank()) continue;
+                String dataUrl = tex.dataUrl();
+                if (dataUrl == null) continue;
+
+                String shortPath = asset.contains("textures/")
+                    ? asset.substring(asset.indexOf("textures/") + 9)
+                    : asset.contains("sounds/")
+                        ? asset.substring(asset.indexOf("sounds/") + 7)
+                        : tex.key();
+                String label = pack.name() + " / " + shortPath;
+                TextureOption opt = TextureOption.web(label, pack.id(), asset,
+                    dataUrl, tex.mcmetaUrl(), tex.particleJsonUrl());
+
                 for (int si = 0; si < SLOTS.length; si++) {
-                    if (!sharesSwordCitPool(SLOTS[si])) continue;
+                    if (!webTextureMatchesSlot(tex, SLOTS[si])) continue;
                     List<TextureOption> list = out.get(si);
                     final String fLabel = label;
-                    final String fEntry = pngEntry;
+                    final String fAsset = asset;
                     if (list.stream().noneMatch(o ->
-                        fLabel.equals(o.label()) && fEntry.equals(o.pngEntry()))) {
+                        fLabel.equals(o.label()) && fAsset.equals(o.pngEntry()))) {
                         list.add(opt);
                         added++;
                     }
                 }
             }
         }
-        SlothyHubMod.LOGGER.info("WebTextureCatalog: added {} sword options from {} pack(s)",
+        SlothyHubMod.LOGGER.info("WebTextureCatalog: added {} picker options from {} pack(s)",
             added, packs.size());
+    }
+
+    private static boolean webTextureMatchesSlot(
+            com.slothyhub.builder.WebTextureCatalog.WebTexture tex, SlotDef slot) {
+        String cat = com.slothyhub.builder.WebTextureCatalog.normalizeCategory(tex.category());
+        String asset = tex.assetPath().replace('\\', '/');
+        String lower = asset.toLowerCase(Locale.ROOT);
+
+        for (String ep : slot.exactPaths()) {
+            if (lower.equals(ep.toLowerCase(Locale.ROOT))) return true;
+        }
+
+        if ("swords".equals(cat)) {
+            if (!sharesSwordCitPool(slot)) return false;
+            return lower.contains("/cit/") && isSwordCitAssetPath(lower);
+        }
+        if ("sounds".equals(cat)) {
+            return matchesSoundSlot(slot, lower);
+        }
+        if (slot.soundOutputBase() != null || !slot.vanillaTexture()) return false;
+        SlotCategory expected = switch (cat) {
+            case "gui" -> SlotCategory.GUI;
+            case "particles" -> SlotCategory.PARTICLES;
+            case "items" -> SlotCategory.ITEMS;
+            case "kill_fx" -> SlotCategory.KILL_FX;
+            default -> null;
+        };
+        if (expected == null || slot.category() != expected) return false;
+        return matchesVanillaAssetSlot(slot, lower);
+    }
+
+    private static boolean matchesSoundSlot(SlotDef slot, String lowerAsset) {
+        if (slot.soundOutputBase() == null) return false;
+        if (!lowerAsset.contains("assets/minecraft/sounds/")) return false;
+        String fileName = lowerAsset.substring(lowerAsset.lastIndexOf('/') + 1).replace(".ogg", "");
+        boolean dirMatch = false;
+        for (String dir : slot.textureDirs()) {
+            if (lowerAsset.contains(dir.toLowerCase(Locale.ROOT))) { dirMatch = true; break; }
+        }
+        if (!dirMatch) return false;
+        for (String kw : slot.textureKeywords()) {
+            if (fileName.contains(kw.toLowerCase(Locale.ROOT))
+                || lowerAsset.contains(kw.toLowerCase(Locale.ROOT))) return true;
+        }
+        return false;
+    }
+
+    /** Same rules as {@link #addVanillaTextureOption} for a single asset path. */
+    private static boolean matchesVanillaAssetSlot(SlotDef slot, String lower) {
+        String fileName = lower.substring(lower.lastIndexOf('/') + 1).replace(".png", "");
+        if (slot.exactPaths().length > 0) {
+            for (String ep : slot.exactPaths()) {
+                if (lower.equals(ep.toLowerCase(Locale.ROOT))) return true;
+            }
+            return false;
+        }
+        boolean dirMatch = false;
+        for (String dir : slot.textureDirs()) {
+            if (lower.contains(dir.toLowerCase(Locale.ROOT))) { dirMatch = true; break; }
+        }
+        if (!dirMatch) return false;
+        if (slot.textureKeywords().length == 0) return true;
+        for (String kw : slot.textureKeywords()) {
+            String kwLower = kw.toLowerCase(Locale.ROOT);
+            if (fileName.equals(kwLower) || fileName.contains(kwLower)) return true;
+        }
+        return false;
     }
 
     private void addSwordCitOption(String packLabel, Path packPath, boolean isZip,
@@ -1492,11 +1567,14 @@ public class TexturePickerScreen extends class_437 {
         // call will see them via WebTextureCache.peek and proceed to upload the GPU
         // texture below.
         if ((png == null || png.length == 0) && opt.isWeb()) {
-            byte[] cached = com.slothyhub.builder.WebTextureCache.peek(opt.webPngUrl());
+            if (opt.webDataUrl() != null && opt.pngEntry() != null && opt.pngEntry().toLowerCase(Locale.ROOT).endsWith(".ogg"))
+                return;
+            byte[] cached = opt.webDataUrl() != null
+                ? com.slothyhub.builder.WebTextureCache.peek(opt.webDataUrl()) : null;
             if (cached != null) {
                 png = cached;
-            } else if (pendingWebPreviews.add(opt.webPngUrl())) {
-                com.slothyhub.builder.WebTextureCache.fetchAsync(opt.webPngUrl());
+            } else if (opt.webDataUrl() != null && pendingWebPreviews.add(opt.webDataUrl())) {
+                com.slothyhub.builder.WebTextureCache.fetchAsync(opt.webDataUrl());
                 return;
             } else {
                 return;
