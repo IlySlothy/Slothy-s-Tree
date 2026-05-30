@@ -59,6 +59,11 @@ public class PackLibraryScreen extends class_437 {
         scroll = scrollTarget = 0;
     }
 
+    /** Called when returning from the texture builder so the list shows the latest save. */
+    public void refreshOnReturn() {
+        refresh();
+    }
+
     @Override
     public void method_25419() {
         executor.shutdownNow();
@@ -214,7 +219,7 @@ public class PackLibraryScreen extends class_437 {
             try {
                 Path zip = BuiltPackLibrary.libraryDir().resolve(pack.getPackFilename());
                 byte[] bytes = Files.readAllBytes(zip);
-                PackDownloader.applyBuiltPack(bytes, pack.getName());
+                PackDownloader.applyBuiltPack(bytes, pack.getName(), BuiltPackLibrary.safeNameFromPack(pack), pack.getId());
                 class_310.method_1551().execute(() -> status.put(pack.getId(), "Applied to resource packs"));
             } catch (Exception e) {
                 class_310.method_1551().execute(() ->

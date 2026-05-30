@@ -43,6 +43,12 @@ public final class CitRuleSet {
         SlothyHubMod.LOGGER.info("CIT: loaded {} rules", ruleSet.rules.size());
     }
 
+    /** Items that have at least one CIT rule registered. */
+    public boolean hasRulesFor(String itemId) {
+        if (itemId == null || itemId.isBlank()) return false;
+        return byItem.containsKey(itemId);
+    }
+
     /**
      * Find the first matching rule for an item.
      *

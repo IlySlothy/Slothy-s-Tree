@@ -14,6 +14,8 @@ import net.minecraft.class_9334;
 import net.minecraft.class_9336;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -22,6 +24,17 @@ import java.util.Map;
 /** Resolves every string that should be tried against CIT name / component rules for a stack. */
 final class CitStackNames {
 
+    private static final int CACHE_MAX = 2048;
+    private static final Map<Long, List<String>> CACHE = Collections.synchronizedMap(
+        new LinkedHashMap<>(256, 0.75f, true) {
+            @Override protected boolean removeEldestEntry(Map.Entry<Long, List<String>> eldest) {
+                return size() > CACHE_MAX;
+            }
+        });
+
+    /** Full tooltip scan — expensive; off by default (lore component covers most PvP packs). */
+    private static final boolean TOOLTIP_RESOLVE =
+        Boolean.parseBoolean(System.getProperty("slothyhub.cit.tooltipResolve", "false"));
     /**
      * PvP servers (Elytra Box, etc.) often put tier tags in lore instead of renaming the item.
      * Summer-style CIT still expects "Warden Sword" — map common tier tags to those names.
@@ -40,7 +53,39 @@ final class CitStackNames {
 
     private CitStackNames() {}
 
+    static void clearCache() {
+        CACHE.clear();
+    }
+
+    static long cacheKey(class_1799 stack) {
+        if (stack == null || stack.method_7960()) return 0L;
+        long h = stack.method_7909().hashCode();
+        try {
+            class_2561 renamed = stack.method_65130();
+            if (renamed != null) h = 31 * h + renamed.getString().hashCode();
+            class_2561 custom = stack.method_58694(class_9334.field_49631);
+            if (custom != null) h = 31 * h + custom.getString().hashCode();
+            class_9290 lore = stack.method_58694(class_9334.field_49632);
+            if (lore != null) h = 31 * h + lore.hashCode();
+            class_9279 customData = stack.method_58694(class_9334.field_49628);
+            if (customData != null && !customData.method_57458()) h = 31 * h + customData.hashCode();
+        } catch (Exception ignored) {}
+        return h;
+    }
+
     static List<String> resolve(class_1799 stack) {
+        if (stack == null || stack.method_7960()) return List.of();
+        long key = cacheKey(stack);
+        if (key != 0L) {
+            List<String> hit = CACHE.get(key);
+            if (hit != null) return hit;
+        }
+        List<String> resolved = List.copyOf(resolveUncached(stack));
+        if (key != 0L) CACHE.put(key, resolved);
+        return resolved;
+    }
+
+    private static List<String> resolveUncached(class_1799 stack) {
         List<String> out = new ArrayList<>();
         LinkedHashSet<String> seen = new LinkedHashSet<>();
 
@@ -68,8 +113,9 @@ final class CitStackNames {
             class_2561 itemName = stack.method_58694(class_9334.field_50239);
             if (itemName != null) addWithTier.accept(itemName.getString());
 
-            // Tooltip — plugin tiers (MYTHIC) and anvil preview names.
-            addTooltipLines(stack, addWithTier);
+            if (TOOLTIP_RESOLVE) {
+                addTooltipLines(stack, addWithTier);
+            }
 
             class_2561 display = stack.method_7964();
             if (display != null) addWithTier.accept(display.getString());

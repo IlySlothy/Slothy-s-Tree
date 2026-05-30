@@ -198,14 +198,37 @@ public class TexturePickerScreen extends class_437 {
 
     private int findMatchingTextureIndex(int slotIdx, TextureOption source) {
         List<TextureOption> opts = discovered.getOrDefault(slotIdx, List.of());
+        String sourceKey = packKey(source);
+        if (sourceKey.isEmpty()) return -1;
         for (int i = 0; i < opts.size(); i++) {
-            if (samePack(source, opts.get(i))) return i;
+            if (sourceKey.equals(packKey(opts.get(i)))) return i;
         }
         return -1;
     }
 
+    /** Stable id for matching paired slots (hearts, etc.) across full/half lists. */
+    private static String packKey(TextureOption o) {
+        if (o == null) return "";
+        if (o.isWeb() && o.webPackId() != null && !o.webPackId().isBlank())
+            return normalizePackKey(o.webPackId());
+        if (o.packPath() != null)
+            return normalizePackKey(packLabelFrom(o.packPath()));
+        if (o.label() != null) {
+            int sep = o.label().indexOf(" / ");
+            if (sep > 0) return normalizePackKey(o.label().substring(0, sep));
+        }
+        return "";
+    }
+
+    private static String normalizePackKey(String key) {
+        return key.trim().toLowerCase(Locale.ROOT).replace(' ', '_').replace('-', '_');
+    }
+
     private static boolean samePack(TextureOption a, TextureOption b) {
-        return a.isZip() == b.isZip() && Objects.equals(a.packPath(), b.packPath());
+        String ka = packKey(a);
+        String kb = packKey(b);
+        if (!ka.isEmpty() && ka.equals(kb)) return true;
+        return a.isZip() == b.isZip() && a.packPath() != null && Objects.equals(a.packPath(), b.packPath());
     }
 
     private static final String DEFAULT_GOLDEN_CRIT_MCMETA =

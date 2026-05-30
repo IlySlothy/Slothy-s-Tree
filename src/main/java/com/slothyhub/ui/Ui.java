@@ -248,6 +248,11 @@ public final class Ui {
             cy + size / 2 + 8, alpha << 24 | (COL_GOLD & 0xFFFFFF), true);
     }
 
+    /** True while kill overlay particles or vignette are still visible. */
+    public static boolean hasActiveKillFx() {
+        return killVignetteAlpha > 0.01f || !killParticles.isEmpty() || totemPopAlpha > 0.01f;
+    }
+
     public static void renderKillEffect(class_332 ctx, int screenW, int screenH, float delta) {
         String effect = SlothyConfig.getKillEffect();
         int vignetteRgb = "anvil".equals(effect) ? 0x666666 : "thunder".equals(effect) ? 0x8899FF : 0xFF9900;

@@ -184,6 +184,11 @@ public class PackDownloader {
     }
 
     public static String applyBuiltPack(byte[] zipData, String packName, String librarySafeName) throws IOException {
+        return applyBuiltPack(zipData, packName, librarySafeName, null);
+    }
+
+    public static String applyBuiltPack(byte[] zipData, String packName, String librarySafeName,
+                                        String replacePackId) throws IOException {
         class_310 mc = class_310.method_1551();
         Path resourcePacksDir = mc.field_1697.toPath().resolve("resourcepacks");
         Files.createDirectories(resourcePacksDir);
@@ -193,7 +198,7 @@ public class PackDownloader {
         Path zipPath = resourcePacksDir.resolve(zipName);
         Files.write(zipPath, zipData);
         PackMetaUtil.repairZip(zipPath);
-        BuiltPackLibrary.savePack(safeBase, packName, Files.readAllBytes(zipPath));
+        BuiltPackLibrary.savePack(safeBase, packName, Files.readAllBytes(zipPath), replacePackId);
 
         final String builderId = "library:" + safeBase;
         mc.execute(() -> {

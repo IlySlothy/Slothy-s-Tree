@@ -69,8 +69,6 @@ final class CitStackNamesModern {
             class_2561 itemName = getComponent(stack, class_9334.field_50239);
             if (itemName != null) addWithTier.accept(itemName.getString());
 
-            addTooltipLines(stack, addWithTier);
-
             class_2561 display = stack.method_7964();
             if (display != null) addWithTier.accept(display.getString());
 

@@ -99,6 +99,11 @@ public final class LegacyCitItemRenderer {
             CitRenderCache.clear(renderState);
             return;
         }
+        if (!ruleSet.hasRulesFor(itemId)) {
+            clearLayerSprites(renderState);
+            CitRenderCache.clear(renderState);
+            return;
+        }
 
         List<String> matchNames = CitStackNames.resolve(stack);
         CitRule rule = ruleSet.findMatch(itemId, matchNames);
@@ -128,7 +133,6 @@ public final class LegacyCitItemRenderer {
             try { texId = sprite.method_45852(); } catch (Exception ignored) {}
         }
         CitRenderCache.remember(renderState, stack, sprite, texId);
-        SlothyHubMod.LOGGER.info("CIT: matched {} for {} (names={})", rule.id, itemId, matchNames);
     }
 
     /** Called from {@link com.slothyhub.mixin.MixinCitItemLayerPrepareDraw} right before each layer draws. */

@@ -89,6 +89,10 @@ public final class ModernCitItemRenderer {
         }
         String itemId = resolveItemId(stack);
         if (itemId == null) return;
+        if (!ruleSet.hasRulesFor(itemId)) {
+            CitRenderCache.clear(renderState);
+            return;
+        }
         List<String> matchNames = CitStackNames.resolve(stack);
         CitRule rule = ruleSet.findMatch(itemId, matchNames);
         if (rule == null || rule.texture.isBlank()) {

@@ -5,6 +5,7 @@ plugins {
 }
 
 apply from: 'gradle/modrinth.gradle'
+apply from: 'gradle/discord-release.gradle'
 
 version = project.mod_version
 group = project.maven_group

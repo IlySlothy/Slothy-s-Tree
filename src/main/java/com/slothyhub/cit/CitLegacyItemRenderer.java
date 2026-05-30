@@ -10,12 +10,31 @@ import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /** CIT applicator for MC 1.20–1.21.3 ItemRenderer (pre render-state pipeline). */
 public final class CitLegacyItemRenderer {
 
+    private static final int MATCH_CACHE_MAX = 1024;
+    private static final Map<Long, CitRule> MATCH_CACHE = Collections.synchronizedMap(
+        new LinkedHashMap<>(256, 0.75f, true) {
+            @Override protected boolean removeEldestEntry(Map.Entry<Long, CitRule> eldest) {
+                return size() > MATCH_CACHE_MAX;
+            }
+        });
+    private static final Set<Long> NO_MATCH = Collections.synchronizedSet(new LinkedHashSet<>());
+
     private CitLegacyItemRenderer() {}
+
+    public static void clearMatchCache() {
+        MATCH_CACHE.clear();
+        NO_MATCH.clear();
+    }
 
     public static class_1087 wrapModel(class_1087 model, class_1799 stack) {
         if (model == null || stack == null || stack.method_7960()) return model;
@@ -24,11 +43,21 @@ public final class CitLegacyItemRenderer {
         if (ruleSet.isEmpty()) return model;
 
         String itemId = resolveItemId(stack);
-        if (itemId == null) return model;
+        if (itemId == null || !ruleSet.hasRulesFor(itemId)) return model;
 
-        List<String> matchNames = CitStackNames.resolve(stack);
-        CitRule rule = ruleSet.findMatch(itemId, matchNames);
-        if (rule == null || rule.texture.isBlank()) return model;
+        long key = CitStackNames.cacheKey(stack);
+        if (key != 0L && NO_MATCH.contains(key)) return model;
+
+        CitRule rule = key != 0L ? MATCH_CACHE.get(key) : null;
+        if (rule == null) {
+            List<String> matchNames = CitStackNames.resolve(stack);
+            rule = ruleSet.findMatch(itemId, matchNames);
+            if (rule == null || rule.texture.isBlank()) {
+                if (key != 0L) NO_MATCH.add(key);
+                return model;
+            }
+            if (key != 0L) MATCH_CACHE.put(key, rule);
+        }
 
         class_1058 sprite = CitVirtualTextures.spriteForRule(rule);
         if (sprite == null) return model;

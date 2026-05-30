@@ -1,0 +1,38 @@
+// Discord #bug-fixes release announcements (.gradle/secrets/discord.properties).
+
+def discordProps = new Properties()
+def discordFile = rootProject.file('.gradle/secrets/discord.properties')
+if (discordFile.exists()) {
+    discordFile.withInputStream { discordProps.load(it) }
+}
+ext.discordWebhookUrl = discordProps.getProperty('webhookUrl', '')
+
+tasks.register('announceReleaseDiscord', Exec) {
+    group = 'publishing'
+    description = 'Post release announcement to Discord #bug-fixes (@here + configured roles)'
+    dependsOn tasks.named('copyReleaseAssets')
+    onlyIf { !rootProject.ext.discordWebhookUrl.isBlank() }
+    doFirst {
+        if (rootProject.ext.discordWebhookUrl.isBlank()) {
+            logger.lifecycle('Skipping announceReleaseDiscord — create .gradle/secrets/discord.properties (see gradle/secrets/discord.properties.example)')
+        }
+    }
+    def notes = findProperty('releaseNotes') ?: ''
+    if (System.getProperty('os.name').toLowerCase().contains('windows')) {
+        commandLine 'powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+            rootProject.file('tools/post-release-discord.ps1').absolutePath,
+            '-Version', project.mod_version,
+            '-Notes', notes
+    } else {
+        commandLine 'pwsh', '-NoProfile', '-File',
+            rootProject.file('tools/post-release-discord.ps1').absolutePath,
+            '-Version', project.mod_version,
+            '-Notes', notes
+    }
+}
+
+tasks.register('releaseAll') {
+    group = 'publishing'
+    description = 'Build release jars, copy to release-assets/, and announce on Discord'
+    dependsOn tasks.named('copyReleaseAssets'), tasks.named('announceReleaseDiscord')
+}

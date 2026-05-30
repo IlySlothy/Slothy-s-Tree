@@ -50,9 +50,7 @@ public class SlothyHubMod implements ClientModInitializer {
         com.slothyhub.ui.GuiAssets.init();
         PackMcmetaRepair.scanAndFixAsync();
         HeartbeatClient.start();
-        // Warm the web texture catalog now so the first time a user opens
-        // Texture Builder it doesn't have to block on the HTTP fetch.
-        com.slothyhub.builder.WebTextureCatalog.refresh();
+        // Catalog loads when Texture Builder opens — avoids background HTTP on every launch.
 
         ClientLifecycleEvents.CLIENT_STARTED.register(client ->
             client.execute(PackDownloader::syncAppliedPacks));
@@ -97,15 +95,14 @@ public class SlothyHubMod implements ClientModInitializer {
         });
 
         HudRenderCallback.EVENT.register((drawContext, tickCounter) -> {
-            if (SlothyConfig.isKillEffectEnabled()) {
-                class_310 mc = class_310.method_1551();
-                if (mc.field_1724 != null) {
-                    int w = mc.method_22683().method_4486();
-                    int h = mc.method_22683().method_4502();
-                    float delta = TickDeltaCompat.delta(tickCounter);
-                    Ui.renderKillEffect(drawContext, w, h, delta);
-                    Ui.renderTotemPop(drawContext, w, h, delta);
-                }
+            if (!SlothyConfig.isKillEffectEnabled() || !Ui.hasActiveKillFx()) return;
+            class_310 mc = class_310.method_1551();
+            if (mc.field_1724 != null) {
+                int w = mc.method_22683().method_4486();
+                int h = mc.method_22683().method_4502();
+                float delta = TickDeltaCompat.delta(tickCounter);
+                Ui.renderKillEffect(drawContext, w, h, delta);
+                Ui.renderTotemPop(drawContext, w, h, delta);
             }
         });
 

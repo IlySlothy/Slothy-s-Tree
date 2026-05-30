@@ -37,6 +37,13 @@ jobs:
             - Fabric API (matching 1.21.11)
             - Java 21
 
+            ### What's new in v1.0.3
+            - Offhands slot: ITEM/BLOCK tabs + amethyst_shard from all packs
+            - Pack Library edit saves in place (no duplicate packs)
+            - Heart Half auto-pairs Heart Full from the same pack
+            - CIT performance: name cache + early exit for non-CIT items
+            - Web catalog live merge for new textures before Pages updates
+
             ### Notes
             - Do **not** install the 1.21.8 jar on 1.21.11
             - CIT is **not** in the main jar on 1.21.9+ — install the CIT companion
@@ -60,6 +67,13 @@ jobs:
 
             CIT is included in the main jar on 1.21.8.
 
+            ### What's new in v1.0.3
+            - Offhands slot: ITEM/BLOCK tabs + amethyst_shard from all packs
+            - Pack Library edit saves in place (no duplicate packs)
+            - Heart Half auto-pairs Heart Full from the same pack
+            - CIT performance: name cache + early exit for non-CIT items
+            - Web catalog live merge for new textures before Pages updates
+
       - name: Create GitHub Release (Legacy 1.20–1.21.1)
         if: github.ref == 'refs/tags/v1.0.3-mc1.20-1.21.1'
         uses: softprops/action-gh-release@v2
@@ -82,6 +96,13 @@ jobs:
             - Fabric Loader 0.14+
             - Fabric API (matching your MC version)
             - Java 17 or 21
+
+            ### What's new in v1.0.3
+            - Offhands slot: ITEM/BLOCK tabs + amethyst_shard from all packs
+            - Pack Library edit saves in place (no duplicate packs)
+            - Heart Half auto-pairs Heart Full from the same pack
+            - CIT performance: name cache + early exit for non-CIT items
+            - Web catalog live merge for new textures before Pages updates
 
             ### CIT behaviour
             - The bundled CIT engine **automatically yields to CIT Resewn / Chime / other CIT-providing mods** when one is present in your mods folder.

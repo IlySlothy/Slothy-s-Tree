@@ -36,32 +36,73 @@ public final class BuiltPackLibrary {
     }
 
     public static void savePack(String safeName, String displayName, byte[] zipData) throws IOException {
-        Files.write(libraryDir().resolve(safeName + ".zip"), zipData);
+        savePack(safeName, displayName, zipData, null);
+    }
+
+    /**
+     * @param replacePackId when editing, the manifest id of the pack being updated (e.g. {@code library:My_Pack})
+     */
+    public static void savePack(String safeName, String displayName, byte[] zipData, String replacePackId)
+            throws IOException {
+        String newId = "library:" + safeName;
+        String newFilename = safeName + ".zip";
+        Files.write(libraryDir().resolve(newFilename), zipData);
+
         JsonObject manifest = readManifest();
         JsonArray packs = manifest.has("packs") ? manifest.getAsJsonArray("packs") : new JsonArray();
-        String id = "library:" + safeName;
+
+        JsonObject previous = null;
+        for (var el : packs) {
+            JsonObject o = el.getAsJsonObject();
+            if (!o.has("id")) continue;
+            String oid = o.get("id").getAsString();
+            if ((replacePackId != null && replacePackId.equals(oid)) || newId.equals(oid)) {
+                previous = o;
+                break;
+            }
+        }
+
+        if (previous != null && previous.has("filename")) {
+            String oldFilename = previous.get("filename").getAsString();
+            if (!oldFilename.isBlank() && !oldFilename.equalsIgnoreCase(newFilename)) {
+                Files.deleteIfExists(libraryDir().resolve(oldFilename));
+            }
+        }
+
         JsonArray kept = new JsonArray();
         for (var el : packs) {
             JsonObject o = el.getAsJsonObject();
-            if (id.equals(o.get("id").getAsString())) continue;
+            if (!o.has("id")) { kept.add(el); continue; }
+            String oid = o.get("id").getAsString();
+            if (replacePackId != null && replacePackId.equals(oid)) continue;
+            if (newId.equals(oid)) continue;
             kept.add(el);
         }
+
         JsonObject entry = new JsonObject();
-        entry.addProperty("id", id);
+        entry.addProperty("id", newId);
         entry.addProperty("name", displayName);
-        entry.addProperty("filename", safeName + ".zip");
-        entry.addProperty("created", System.currentTimeMillis());
+        entry.addProperty("filename", newFilename);
+        long created = System.currentTimeMillis();
+        if (previous != null && previous.has("created")) created = previous.get("created").getAsLong();
+        entry.addProperty("created", created);
         kept.add(entry);
         manifest.add("packs", kept);
         Files.writeString(libraryDir().resolve(MANIFEST), GSON.toJson(manifest), StandardCharsets.UTF_8);
     }
 
     public static String safeNameFromPack(Pack pack) {
-        String fn = pack.getPackFilename();
-        if (fn != null && fn.toLowerCase(Locale.ROOT).endsWith(".zip"))
-            return fn.substring(0, fn.length() - 4);
+        if (pack == null) return sanitizeName("SlothyCustomPack");
         String id = pack.getId();
-        if (id != null && id.startsWith("library:")) return id.substring("library:".length());
+        if (id != null && id.startsWith("library:")) {
+            String fromId = id.substring("library:".length());
+            if (!fromId.isBlank()) return fromId;
+        }
+        String fn = pack.getPackFilename();
+        if (fn != null && !fn.isBlank() && !"pack.zip".equalsIgnoreCase(fn.trim())) {
+            if (fn.toLowerCase(Locale.ROOT).endsWith(".zip"))
+                return fn.substring(0, fn.length() - 4);
+        }
         return sanitizeName(pack.getName());
     }
 

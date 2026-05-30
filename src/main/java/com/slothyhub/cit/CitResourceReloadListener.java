@@ -36,6 +36,8 @@ public final class CitResourceReloadListener implements SimpleSynchronousResourc
         if (!SlothyConfig.isCitEnabled()) {
             CitRuleSet.setActive(new CitRuleSet(List.of()));
             CitVirtualTextures.clear();
+            CitStackNames.clearCache();
+            CitLegacyItemRenderer.clearMatchCache();
             return;
         }
         if (manager == null) return;
@@ -76,6 +78,8 @@ public final class CitResourceReloadListener implements SimpleSynchronousResourc
         }
 
         CitRuleSet.setActive(new CitRuleSet(rules));
+        CitStackNames.clearCache();
+        CitLegacyItemRenderer.clearMatchCache();
         SlothyHubMod.LOGGER.info("CIT: scanned {} properties files, loaded {} rules.", scanned, rules.size());
         for (CitRule r : rules) {
             SlothyHubMod.LOGGER.info("CIT: rule {} items={} name='{}' texture={}",
