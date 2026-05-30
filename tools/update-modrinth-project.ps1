@@ -21,40 +21,8 @@ Get-Content $ConfigPath | ForEach-Object {
   $cfg[$line.Substring(0, $eq).Trim()] = $line.Substring($eq + 1).Trim()
 }
 $token = $cfg['token']
+if (-not $token) { $token = $cfg['modrinthToken'] }
 if (-not $token) { throw 'modrinth token missing' }
-
-$body = @{
-  body = @"
-**Slothy's Tree** is a client-side Fabric mod for browsing, applying, and building custom Minecraft resource packs — without leaving the game.
-
-### Features
-- Pack browser with 40+ curated packs (GitHub Pages catalog)
-- Texture Builder — mix item textures into custom packs
-- OptiFine CIT support (by item name, damage, NBT)
-- Community pack stars, uploads, and featured pack of the week
-
-### Links
-- **Pack catalog & site:** https://ilyslothy.github.io/Slothy-s-Tree
-- **Source code:** https://github.com/IlySlothy/Slothy-s-Tree
-- **Issue tracker:** https://github.com/IlySlothy/Slothy-s-Tree/issues
-- **Releases:** https://github.com/IlySlothy/Slothy-s-Tree/releases
-
-### Requirements
-- Fabric Loader (0.19+)
-- [Fabric API](https://modrinth.com/mod/fabric-api) for your Minecraft version
-- **Client-side only** — not required on servers
-
-Optional online features (pack stars, upload review) use a Cloudflare Worker; the mod works offline with the bundled catalog.
-"@
-  link_urls = @{
-    homepage = 'https://ilyslothy.github.io/Slothy-s-Tree'
-    source   = 'https://github.com/IlySlothy/Slothy-s-Tree'
-    issues   = 'https://github.com/IlySlothy/Slothy-s-Tree/issues'
-    wiki     = 'https://github.com/IlySlothy/Slothy-s-Tree#readme'
-  }
-  client_side = 'required'
-  server_side = 'unsupported'
-} | ConvertTo-Json -Depth 4 -Compress
 
 $headers = @{
   Authorization = $token
@@ -62,5 +30,25 @@ $headers = @{
   'Content-Type'= 'application/json'
 }
 
-Invoke-RestMethod -Uri "https://api.modrinth.com/v2/project/$ProjectId" -Method Patch -Headers $headers -Body $body | Out-Null
+$payload = @{
+  body = @"
+**Slothy's Tree** is a client-side Fabric mod for browsing, applying, and building custom Minecraft resource packs.
+
+**Pack catalog:** https://ilyslothy.github.io/Slothy-s-Tree
+**Source:** https://github.com/IlySlothy/Slothy-s-Tree
+**Issues:** https://github.com/IlySlothy/Slothy-s-Tree/issues
+
+Requires Fabric Loader and Fabric API. Client-side only.
+"@
+  link_urls = @{
+    website = 'https://ilyslothy.github.io/Slothy-s-Tree'
+    source  = 'https://github.com/IlySlothy/Slothy-s-Tree'
+    issues  = 'https://github.com/IlySlothy/Slothy-s-Tree/issues'
+  }
+}
+$json = $payload | ConvertTo-Json -Depth 4
+$utf8 = New-Object System.Text.UTF8Encoding $false
+$bytes = $utf8.GetBytes($json)
+
+Invoke-RestMethod -Uri "https://api.modrinth.com/v2/project/$ProjectId" -Method Patch -Headers $headers -Body $bytes | Out-Null
 Write-Host "Updated Modrinth project $ProjectId metadata."
