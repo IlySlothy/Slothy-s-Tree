@@ -1,0 +1,12 @@
+{
+  "version": "1.0.5",
+  "title": "Stars, uploads & featured packs",
+  "items": [
+    "Star / unstar packs — community votes sync live in the Pack Browser",
+    "Upload tags — pick PvP, CIT, swords, and armor when submitting a pack",
+    "My Uploads — track pending, approved, and denied submissions in the mod",
+    "Featured pack of the week — community pick pinned at the top of the browser",
+    "Texture Builder — fixed hang on resource pack scan",
+    "What's new — this screen on first launch after an update"
+  ]
+}

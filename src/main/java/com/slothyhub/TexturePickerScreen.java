@@ -576,21 +576,25 @@ public class TexturePickerScreen extends class_437 {
         mergeSharedSwordPool(result);
         mergeOffhandsPool(result);
 
-        class_310 mc = class_310.method_1551();
-        java.util.concurrent.CountDownLatch loaded = new java.util.concurrent.CountDownLatch(1);
-        mc.execute(() -> {
+        int preActiveCount = countOptions(result);
+        boolean webReady = !com.slothyhub.builder.WebTextureCatalog.snapshot().isEmpty();
+        // Active-pack scan walks every PNG in loaded packs on the render thread — very slow with
+        // many packs. Skip when the web catalog (or local scan) already populated the picker.
+        boolean runActiveScan = SlothyConfig.isShowLocalPacks()
+            || (!webReady && preActiveCount == 0);
+
+        if (runActiveScan) {
+            updateScanStatus("Scanning active resource packs…");
             try {
-                scanStatus = "Scanning active resource packs…";
                 int added = scanLoadedResourcePacks(result);
                 SlothyHubMod.LOGGER.info("TexturePicker: loaded-resource scan added {} options", added);
             } catch (Exception e) {
                 SlothyHubMod.LOGGER.warn("TexturePicker loaded-resource scan error: {}", e.getMessage());
-            } finally {
-                loaded.countDown();
             }
-        });
-        try { loaded.await(20, java.util.concurrent.TimeUnit.SECONDS); } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+        } else {
+            SlothyHubMod.LOGGER.info(
+                "TexturePicker: skipping active pack scan ({} web/local options ready)",
+                preActiveCount);
         }
 
         mergeSharedSwordPool(result);
@@ -599,6 +603,7 @@ public class TexturePickerScreen extends class_437 {
         final int finalPackCount = packCount;
         final int finalTotalOpts = totalOpts;
 
+        class_310 mc = class_310.method_1551();
         mc.execute(() -> {
             discovered.clear();
             discovered.putAll(result);
@@ -611,11 +616,21 @@ public class TexturePickerScreen extends class_437 {
                 scanStatus = finalPackCount == 0
                     ? "No packs found — add packs to resourcepacks/ or slothyhub-local/"
                     : "No matching textures in " + finalPackCount + " pack(s)";
+            } else {
+                scanStatus = "";
             }
             SlothyHubMod.LOGGER.info("TexturePicker: {} options across {} slots ({} pack roots)",
                 finalTotalOpts, SLOTS.length, finalPackCount);
         });
     }
+
+    private void updateScanStatus(String msg) {
+        class_310 mc = class_310.method_1551();
+        if (mc != null) mc.execute(() -> scanStatus = msg);
+    }
+
+    private static final int ACTIVE_SCAN_MAX_FILES = 800;
+    private static final long ACTIVE_SCAN_BUDGET_MS = 6_000L;
 
     /** Scan textures from packs currently loaded in-game (includes server resource packs). */
     private int scanLoadedResourcePacks(Map<Integer, List<TextureOption>> result) {
@@ -623,18 +638,23 @@ public class TexturePickerScreen extends class_437 {
         if (manager == null) return 0;
 
         int added = 0;
+        int filesScanned = 0;
+        long deadline = System.currentTimeMillis() + ACTIVE_SCAN_BUDGET_MS;
         String packLabel = "Active packs";
         StreamOpener opener = path -> ResourceScanHelper.openPath(manager, path);
 
         for (String namespace : ResourceScanHelper.namespaces(manager)) {
+            if (System.currentTimeMillis() > deadline) break;
             java.util.Map<class_2960, ?> props = ResourceScanHelper.findResources(manager, namespace, id -> {
                 String path = id.method_12832();
                 return path.endsWith(".properties") && path.contains("cit/");
             });
             for (var entry : props.entrySet()) {
+                if (System.currentTimeMillis() > deadline || filesScanned >= ACTIVE_SCAN_MAX_FILES) break;
                 class_2960 rid = entry.getKey();
                 try (InputStream in = ResourceScanHelper.openMapEntry(manager, rid, entry.getValue())) {
                     if (in == null) continue;
+                    filesScanned++;
                     String propPath = "assets/" + rid.method_12836() + "/" + rid.method_12832();
                     int before = countOptions(result);
                     parseCitEntry(packLabel, null, false, propPath, entryDir(propPath),
@@ -654,23 +674,25 @@ public class TexturePickerScreen extends class_437 {
                 || path.startsWith("textures/gui/");
         });
         for (var entry : pngs.entrySet()) {
+            if (System.currentTimeMillis() > deadline || filesScanned >= ACTIVE_SCAN_MAX_FILES) break;
             class_2960 rid = entry.getKey();
             String entryPath = "assets/minecraft/" + rid.method_12832();
-            try (InputStream in = ResourceScanHelper.openMapEntry(manager, rid, entry.getValue())) {
-                if (in == null) continue;
-                int before = countOptions(result);
-                addVanillaTextureOption(packLabel, null, false, entryPath, in.readAllBytes(), result);
-                added += countOptions(result) - before;
-            } catch (Exception ignored) {}
+            filesScanned++;
+            int before = countOptions(result);
+            // Preview loaded lazily when the row is drawn — avoids reading thousands of PNGs here.
+            addVanillaTextureOption(packLabel, null, false, entryPath, null, result);
+            added += countOptions(result) - before;
         }
 
         java.util.Map<class_2960, ?> oggs = ResourceScanHelper.findResources(manager, "minecraft", id ->
             id.method_12832().endsWith(".ogg") && id.method_12832().startsWith("sounds/"));
         for (var entry : oggs.entrySet()) {
+            if (System.currentTimeMillis() > deadline || filesScanned >= ACTIVE_SCAN_MAX_FILES) break;
             class_2960 rid = entry.getKey();
             String entryPath = "assets/minecraft/" + rid.method_12832();
             try (InputStream in = ResourceScanHelper.openMapEntry(manager, rid, entry.getValue())) {
                 if (in == null) continue;
+                filesScanned++;
                 int before = countOptions(result);
                 addSoundOption(packLabel, null, false, entryPath, in.readAllBytes(), result);
                 added += countOptions(result) - before;

@@ -28,6 +28,9 @@ PACK_TICKET_CATEGORY_ID = "1252079007323656305"
 
 # Fallback if DM + ticket both fail or are unset
 PACK_REVIEW_CHANNEL_ID = "1508910255738716370"
+SUGGESTIONS_CHANNEL_ID = "1510387962301513759"
+# Optional default channel for POST /v1/setup-leaderboard (or use /setup-leaderboard in Discord)
+LEADERBOARD_CHANNEL_ID = ""
 
 # Secrets (set with `wrangler secret put <NAME>`):
 #   DISCORD_PUBLIC_KEY   - Application -> General Information -> Public Key

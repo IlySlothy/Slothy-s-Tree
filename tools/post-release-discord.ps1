@@ -52,10 +52,16 @@ if (-not $Version) {
 $baseVer = ($Version -replace '-mc.*$', '').Trim()
 $repoUrl = 'https://github.com/IlySlothy/Slothy-s-Tree/releases'
 
-$roleIds = @($cfg['roleIds'] -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-$pingParts = @('@here')
+$roleIds = @()
+if ($cfg['modUpdatesRoleId']) {
+  $roleIds = @($cfg['modUpdatesRoleId'].Trim())
+} elseif ($cfg['roleIds']) {
+  $roleIds = @($cfg['roleIds'] -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+}
+$pingParts = @()
 foreach ($id in $roleIds) { $pingParts += "<@&$id>" }
 $content = ($pingParts -join ' ')
+if (-not $content) { $content = 'New release:' }
 
 $noteLines = if ($Notes) {
   ($Notes -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ })
@@ -83,7 +89,7 @@ $tag118 = "v${baseVer}-mc1.21.8"
 $tag201 = "v${baseVer}-mc1.20-1.21.1"
 
 $embed = @{
-  title       = "Slothy's Tree v$baseVer - Pack Builder update"
+  title       = "Slothy's Tree v$baseVer"
   url         = "$repoUrl/latest"
   color       = 5414522
   description = ($descLines -join "`n")
@@ -117,7 +123,7 @@ $payload = @{
   content          = $content
   embeds           = @($embed)
   allowed_mentions = @{
-    parse = @('everyone')
+    parse = @()
     roles = $roleIds
   }
 }

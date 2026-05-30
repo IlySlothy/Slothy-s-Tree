@@ -95,6 +95,13 @@ public class PackLibraryScreen extends class_437 {
         ctx.method_25294(0, HEADER - 1, field_22789, HEADER, Ui.COL_BORDER);
         Ui.drawSlothLogo(ctx, PAD, (HEADER - 16) / 2, phase);
         DrawHelper.drawText(ctx, field_22793, "MY PACK LIBRARY", PAD + 22, (HEADER - 9) / 2, Ui.COL_ACCENT, false);
+        int uploadsW = field_22793.method_1727("MY UPLOADS") + 12;
+        int uploadsX = field_22789 - PAD - uploadsW - 8 - field_22793.method_1727(packs.size() + " pack(s)");
+        boolean uploadsHov = mx >= uploadsX && mx <= uploadsX + uploadsW && my >= 8 && my <= HEADER - 8;
+        ctx.method_25294(uploadsX, 14, uploadsX + uploadsW, 32,
+            uploadsHov ? col(Ui.COL_ACCENT & 0xFFFFFF, 50) : col(Ui.COL_SURFACE & 0xFFFFFF, 120));
+        DrawHelper.drawText(ctx, field_22793, "MY UPLOADS", uploadsX + 6, 18,
+            uploadsHov ? Ui.COL_ACCENT : Ui.COL_MUTED, false);
         DrawHelper.drawText(ctx, field_22793, packs.size() + " pack(s)",
             field_22789 - PAD - field_22793.method_1727(packs.size() + " pack(s)"),
             (HEADER - 9) / 2, Ui.COL_MUTED, false);
@@ -189,6 +196,13 @@ public class PackLibraryScreen extends class_437 {
         if (button != 0) return InputCompat.delegateToChildren(this, mx, my, button);
         if (InputCompat.delegateToChildren(this, mx, my, button)) return true;
 
+        int uploadsW = field_22793.method_1727("MY UPLOADS") + 12;
+        int uploadsX = field_22789 - PAD - uploadsW - 8 - field_22793.method_1727(packs.size() + " pack(s)");
+        if (mx >= uploadsX && mx <= uploadsX + uploadsW && my >= 14 && my <= 32) {
+            openUploadDashboard();
+            return true;
+        }
+
         int top = HEADER, bot = field_22790 - FOOTER;
         int cardW = Math.min(field_22789 - PAD * 2, 720);
         int cardX = (field_22789 - cardW) / 2;
@@ -225,6 +239,10 @@ public class PackLibraryScreen extends class_437 {
 
     private void requestUpload(Pack pack) {
         class_310.method_1551().method_1507(new PackSubmitScreen(this, pack));
+    }
+
+    private void openUploadDashboard() {
+        class_310.method_1551().method_1507(new UploadDashboardScreen(this));
     }
 
     private void applyPack(Pack pack) {

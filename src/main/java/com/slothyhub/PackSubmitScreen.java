@@ -10,6 +10,11 @@ import net.minecraft.class_437;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -18,13 +23,15 @@ public class PackSubmitScreen extends class_437 {
 
     private static final int FOOTER = 36;
     private static final int FIELD_H = 22;
-    private static final int ROW_GAP = 14;
+    private static final int ROW_GAP = 12;
+    private static final String[] TAG_OPTIONS = {"pvp", "cit", "swords", "armor"};
 
     private enum Focus { NONE, NAME, DESC, CONTACT }
 
     private final class_437 parent;
     private final Pack pack;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final Set<String> selectedTags = new LinkedHashSet<>();
 
     private String nameText = "";
     private String descText = "";
@@ -32,7 +39,7 @@ public class PackSubmitScreen extends class_437 {
     private Focus focus = Focus.NAME;
 
     private int cardX, cardW;
-    private int nameBoxY, descBoxY, contactBoxY;
+    private int nameBoxY, descBoxY, contactBoxY, tagsY;
 
     private String statusMsg = "";
     private int statusColor = Ui.COL_MUTED;
@@ -44,6 +51,7 @@ public class PackSubmitScreen extends class_437 {
         this.parent = parent;
         this.pack = pack;
         this.nameText = pack.getName() != null ? pack.getName() : "";
+        selectedTags.add("pvp");
     }
 
     private void layoutFields() {
@@ -55,6 +63,7 @@ public class PackSubmitScreen extends class_437 {
         descBoxY = y + 12;
         y = descBoxY + FIELD_H + ROW_GAP;
         contactBoxY = y + 12;
+        tagsY = contactBoxY + FIELD_H + 18;
     }
 
     @Override
@@ -77,7 +86,7 @@ public class PackSubmitScreen extends class_437 {
             field_22789 / 2 - field_22793.method_1727(sub) / 2, 52, Ui.COL_MUTED, false);
 
         int cardTop = 62;
-        int cardBot = contactBoxY + FIELD_H + 36;
+        int cardBot = tagsY + 28;
         ctx.method_25294(cardX - 8, cardTop, cardX + cardW + 8, cardBot, col(Ui.COL_PANEL & 0xFFFFFF, 200));
         ctx.method_25294(cardX - 8, cardTop, cardX + cardW + 8, cardTop + 1, Ui.COL_BORDER);
         ctx.method_25294(cardX - 8, cardBot - 1, cardX + cardW + 8, cardBot, Ui.COL_BORDER);
@@ -87,10 +96,13 @@ public class PackSubmitScreen extends class_437 {
             "What's in this pack? Credit sources, PvP tier…", descBoxY, focus == Focus.DESC);
         drawField(ctx, "Contact (optional)", contactText, "Discord username", contactBoxY, focus == Focus.CONTACT);
 
+        DrawHelper.drawText(ctx, field_22793, "Tags", cardX, tagsY - 11, Ui.COL_TEXT, false);
+        drawTagChips(ctx, mx, my);
+
         String author = resolveAuthorName();
-        DrawHelper.drawText(ctx, field_22793, "Minecraft: " + author, cardX, contactBoxY + FIELD_H + 10, Ui.COL_MUTED, false);
+        DrawHelper.drawText(ctx, field_22793, "Minecraft: " + author, cardX, cardBot + 8, Ui.COL_MUTED, false);
         DrawHelper.drawText(ctx, field_22793, "Max 8 MB · Review usually takes a few days",
-            cardX, contactBoxY + FIELD_H + 22, Ui.COL_MUTED, false);
+            cardX, cardBot + 20, Ui.COL_MUTED, false);
 
         if (!statusMsg.isBlank()) {
             int cx = field_22789 / 2;
@@ -110,6 +122,36 @@ public class PackSubmitScreen extends class_437 {
         drawBtn(ctx, cx - 120, field_22790 - 28, 112, 20,
             submitting ? "UPLOADING…" : "SUBMIT", submitHov && !submitting, Ui.COL_ACCENT);
         drawBtn(ctx, cx + 8, field_22790 - 28, 72, 20, "BACK", cancelHov, Ui.COL_SURFACE);
+    }
+
+    private void drawTagChips(class_332 ctx, int mx, int my) {
+        int x = cardX;
+        int y = tagsY;
+        int gap = 6;
+        for (String tag : TAG_OPTIONS) {
+            String label = tag.toUpperCase(Locale.ROOT);
+            int w = field_22793.method_1727(label) + 14;
+            boolean on = selectedTags.contains(tag);
+            boolean hov = mx >= x && mx <= x + w && my >= y && my <= y + 18;
+            int bg = on ? Ui.COL_ACCENT : (hov ? col(Ui.COL_SURFACE & 0xFFFFFF, 220) : col(Ui.COL_SURFACE & 0xFFFFFF, 160));
+            int fg = on ? Ui.COL_BG : Ui.COL_TEXT;
+            ctx.method_25294(x, y, x + w, y + 18, bg);
+            DrawHelper.drawText(ctx, field_22793, label, x + 7, y + 5, fg, false);
+            x += w + gap;
+        }
+    }
+
+    private boolean hitTag(double mx, double my, String tag) {
+        int x = cardX;
+        int y = tagsY;
+        int gap = 6;
+        for (String t : TAG_OPTIONS) {
+            String label = t.toUpperCase(Locale.ROOT);
+            int w = field_22793.method_1727(label) + 14;
+            if (t.equals(tag) && mx >= x && mx <= x + w && my >= y && my <= y + 18) return true;
+            x += w + gap;
+        }
+        return false;
     }
 
     private static int col(int rgb, int a) {
@@ -156,6 +198,15 @@ public class PackSubmitScreen extends class_437 {
 
     public boolean method_25402(double mx, double my, int button) {
         if (button != 0) return false;
+
+        for (String tag : TAG_OPTIONS) {
+            if (hitTag(mx, my, tag)) {
+                if (selectedTags.contains(tag)) selectedTags.remove(tag);
+                else selectedTags.add(tag);
+                focus = Focus.NONE;
+                return true;
+            }
+        }
 
         if (hitBox(mx, my, nameBoxY)) { focus = Focus.NAME; return true; }
         if (hitBox(mx, my, descBoxY)) { focus = Focus.DESC; return true; }
@@ -261,15 +312,18 @@ public class PackSubmitScreen extends class_437 {
         String description = descText.trim();
         String contact = contactText.trim();
         String author = resolveAuthorName();
+        List<String> tags = new ArrayList<>(selectedTags);
 
         executor.submit(() -> {
             try {
                 Path zip = BuiltPackLibrary.libraryDir().resolve(pack.getPackFilename());
                 byte[] bytes = Files.readAllBytes(zip);
                 PackSubmitClient.SubmitRequest req = new PackSubmitClient.SubmitRequest(
-                    name, description, author, contact, pack.getId(), SlothyConfig.getVoterId());
+                    name, description, author, contact, pack.getId(),
+                    SlothyConfig.getVoterId(), tags);
                 PackSubmitClient.SubmitResult result =
                     PackSubmitClient.submit(bytes, pack.getPackFilename(), req);
+                UploadTracker.remember(result.submissionId(), name, tags);
                 class_310.method_1551().execute(() -> {
                     submitting = false;
                     statusMsg = result.message()

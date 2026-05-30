@@ -24,6 +24,8 @@ public class Pack {
     private int downloads;
     private String sha256;
     private boolean viewer_starred;
+    private boolean featured;
+    private double featured_until;
 
     // extra field for local packs
     private boolean local = false;
@@ -44,6 +46,12 @@ public class Pack {
     public int getDownloads() { return Math.max(0, downloads); }
     public String getSha256() { return sha256 != null ? sha256.trim() : ""; }
     public boolean isViewerStarred() { return viewer_starred; }
+    public boolean isFeatured() {
+        if (!featured) return false;
+        if (featured_until > 0 && System.currentTimeMillis() / 1000.0 > featured_until) return false;
+        return true;
+    }
+    public double getFeaturedUntil() { return featured_until; }
     public boolean isLocal() { return local; }
 
     public void setStarCount(int v) { star_count = Math.max(0, v); }

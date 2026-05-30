@@ -5,6 +5,9 @@
  *   POST  /              - Discord interactions endpoint (signature-required)
  *   POST  /v1/heartbeat  - Mod clients ping with {clientId: "<uuid>"}
  *   POST  /v1/pack-submit - Mod uploads a built pack zip for moderator review
+ *   POST  /v1/pack-star   - Toggle star on a catalog pack (one vote per client UUID)
+ *   GET   /v1/pack-stars  - Star counts + which packs this client starred
+ *   POST  /v1/setup-leaderboard - [Admin] Post live star leaderboard embed in a channel
  *   GET   /v1/stats      - Read active count (mostly for debugging)
  *   GET   /healthz       - Liveness check
  *
@@ -36,45 +39,53 @@ const SUBMIT_RATE_MAX   = 3;
 const SUBMIT_RATE_TTL   = 60 * 60;
 const SUBMIT_STORE_TTL  = 30 * 24 * 60 * 60;
 const PACKS_JSON_PATH   = 'docs/api/packs.json';
+const STAR_COUNT_PREFIX = 'ps:star:count:';
+const STAR_VOTE_PREFIX  = 'ps:star:vote:';
+const STAR_RATE_PREFIX  = 'ps:star:rate:';
+const STAR_RATE_MAX     = 60;
+const STAR_RATE_TTL     = 60 * 60;
+const LEADERBOARD_CONFIG_KEY = 'ps:leaderboard:config';
+const LEADERBOARD_HASH_KEY   = 'ps:leaderboard:hash';
+const LEADERBOARD_TOP_N      = 10;
 
 const RELEASES = [
     {
-        id: '1.0.4-mc1.21.11',
-        version: '1.0.4',
-        label: 'v1.0.4 - MC 1.21.11',
+        id: '1.0.5-mc1.21.11',
+        version: '1.0.5',
+        label: 'v1.0.5 - MC 1.21.11',
         description: 'For Minecraft 1.21.9 - 1.21.11 (Fabric / Feather)',
-        jar: 'slothyhub-1.0.4-mc1.21.11.jar',
-        tag: 'v1.0.4-mc1.21.11',
+        jar: 'slothyhub-1.0.5-mc1.21.11.jar',
+        tag: 'v1.0.5-mc1.21.11',
         mc: '1.21.9 - 1.21.11',
-        downloadUrl: 'https://github.com/IlySlothy/Slothy-s-Tree/releases/download/v1.0.4-mc1.21.11/slothyhub-1.0.4-mc1.21.11.jar',
-        pageUrl:     'https://github.com/IlySlothy/Slothy-s-Tree/releases/tag/v1.0.4-mc1.21.11',
-        extraJar: 'slothyhub-cit-1.0.4-mc1.21.11.jar',
-        extraUrl:  'https://github.com/IlySlothy/Slothy-s-Tree/releases/download/v1.0.4-mc1.21.11/slothyhub-cit-1.0.4-mc1.21.11.jar',
+        downloadUrl: 'https://github.com/IlySlothy/Slothy-s-Tree/releases/download/v1.0.5-mc1.21.11/slothyhub-1.0.5-mc1.21.11.jar',
+        pageUrl:     'https://github.com/IlySlothy/Slothy-s-Tree/releases/tag/v1.0.5-mc1.21.11',
+        extraJar: 'slothyhub-cit-1.0.5-mc1.21.11.jar',
+        extraUrl:  'https://github.com/IlySlothy/Slothy-s-Tree/releases/download/v1.0.5-mc1.21.11/slothyhub-cit-1.0.5-mc1.21.11.jar',
         extraNote: 'Required CIT companion on 1.21.9+',
     },
     {
-        id: '1.0.4-mc1.21.8',
-        version: '1.0.4',
-        label: 'v1.0.4 - MC 1.21.8',
+        id: '1.0.5-mc1.21.8',
+        version: '1.0.5',
+        label: 'v1.0.5 - MC 1.21.8',
         description: 'For Minecraft 1.21.8 (Fabric)',
-        jar: 'slothyhub-1.0.4-mc1.21.8.jar',
-        tag: 'v1.0.4-mc1.21.8',
+        jar: 'slothyhub-1.0.5-mc1.21.8.jar',
+        tag: 'v1.0.5-mc1.21.8',
         mc: '1.21.8',
-        downloadUrl: 'https://github.com/IlySlothy/Slothy-s-Tree/releases/download/v1.0.4-mc1.21.8/slothyhub-1.0.4-mc1.21.8.jar',
-        pageUrl:     'https://github.com/IlySlothy/Slothy-s-Tree/releases/tag/v1.0.4-mc1.21.8',
+        downloadUrl: 'https://github.com/IlySlothy/Slothy-s-Tree/releases/download/v1.0.5-mc1.21.8/slothyhub-1.0.5-mc1.21.8.jar',
+        pageUrl:     'https://github.com/IlySlothy/Slothy-s-Tree/releases/tag/v1.0.5-mc1.21.8',
     },
     {
-        id: '1.0.4-mc1.20-1.21.1',
-        version: '1.0.4',
-        label: 'v1.0.4 - MC 1.20 - 1.21.1',
+        id: '1.0.5-mc1.20-1.21.1',
+        version: '1.0.5',
+        label: 'v1.0.5 - MC 1.20 - 1.21.1',
         description: 'Legacy build (MC 1.20 - 1.21.1)',
-        jar: 'slothyhub-1.0.4-mc1.20-1.21.1.jar',
-        tag: 'v1.0.4-mc1.20-1.21.1',
+        jar: 'slothyhub-1.0.5-mc1.20-1.21.1.jar',
+        tag: 'v1.0.5-mc1.20-1.21.1',
         mc: '1.20 - 1.21.1',
-        downloadUrl: 'https://github.com/IlySlothy/Slothy-s-Tree/releases/download/v1.0.4-mc1.20-1.21.1/slothyhub-1.0.4-mc1.20-1.21.1.jar',
-        pageUrl:     'https://github.com/IlySlothy/Slothy-s-Tree/releases/tag/v1.0.4-mc1.20-1.21.1',
-        extraJar: 'slothyhub-legacy-cit-1.0.4-mc1.21.8-legacy.jar',
-        extraUrl:  'https://github.com/IlySlothy/Slothy-s-Tree/releases/download/v1.0.4-mc1.20-1.21.1/slothyhub-legacy-cit-1.0.4-mc1.21.8-legacy.jar',
+        downloadUrl: 'https://github.com/IlySlothy/Slothy-s-Tree/releases/download/v1.0.5-mc1.20-1.21.1/slothyhub-1.0.5-mc1.20-1.21.1.jar',
+        pageUrl:     'https://github.com/IlySlothy/Slothy-s-Tree/releases/tag/v1.0.5-mc1.20-1.21.1',
+        extraJar: 'slothyhub-legacy-cit-1.0.5-mc1.21.8-legacy.jar',
+        extraUrl:  'https://github.com/IlySlothy/Slothy-s-Tree/releases/download/v1.0.5-mc1.20-1.21.1/slothyhub-legacy-cit-1.0.5-mc1.21.8-legacy.jar',
         extraNote: 'CIT companion for MC 1.20 - 1.21.7',
     },
 ];
@@ -182,6 +193,16 @@ async function discordBotRequest(env, method, path, body) {
     });
 }
 
+async function discordBotPut(env, path) {
+    return fetch(`${DISCORD_API}${path}`, {
+        method: 'PUT',
+        headers: {
+            Authorization: `Bot ${env.DISCORD_TOKEN}`,
+            'User-Agent': USER_AGENT,
+        },
+    });
+}
+
 async function discordPostMultipart(env, channelId, payload, zipBytes, filename) {
     const form = new FormData();
     form.append('payload_json', JSON.stringify(payload));
@@ -253,6 +274,7 @@ function buildPackReviewPayload(env, meta, zipBytes, filename, context) {
         `**Minecraft author:** ${meta.authorName || 'Unknown'}`,
     ];
     if (meta.contact) descLines.push(`**Contact:** ${meta.contact}`);
+    if (meta.tags?.length) descLines.push(`**Tags:** ${meta.tags.map(t => `\`${t}\``).join(' ')}`);
     if (meta.description) descLines.push('', meta.description);
     descLines.push('', `**Submission ID:** \`${meta.submissionId}\``);
     descLines.push(`**Client:** \`${meta.clientId.slice(0, 8)}…\``);
@@ -683,6 +705,32 @@ async function handleCommand(interaction, env, ctx) {
         return deferred({ ephemeral: true });
     }
 
+    if (name === 'setup-leaderboard') {
+        if (!interaction.guild_id) {
+            return reply({ content: '`/setup-leaderboard` can only be used inside a server.' });
+        }
+        const channelId = interaction.channel_id;
+        ctx.waitUntil((async () => {
+            try {
+                const result = await setupLeaderboardInChannel(env, channelId);
+                await discordPatchFollowup(env, interaction.token, {
+                    content: [
+                        '⭐ **Pack leaderboard posted** in this channel.',
+                        `Showing **top ${LEADERBOARD_TOP_N}** of **${result.packCount}** pack(s) — most stars at the top.`,
+                        'The list updates automatically when players star packs in the mod.',
+                        result.pinned ? 'Pinned the leaderboard message.' : '',
+                    ].filter(Boolean).join('\n'),
+                });
+            } catch (err) {
+                console.warn('/setup-leaderboard failed:', err.message ?? err);
+                await discordPatchFollowup(env, interaction.token, {
+                    content: 'Could not post the leaderboard. I need **Send Messages**, **Embed Links**, and **Manage Messages** here.',
+                });
+            }
+        })());
+        return deferred({ ephemeral: true });
+    }
+
     if (name === 'pack-approve') {
         return handlePackReviewCommand(interaction, env, ctx, 'approve');
     }
@@ -849,6 +897,28 @@ async function savePendingSubmission(env, submissionId, meta, zipBytes, filename
     await env.HEARTBEATS.put(`ps:zip:${submissionId}`, zipBytes, {
         expirationTtl: SUBMIT_STORE_TTL,
     });
+    await indexClientSubmission(env, meta.clientId, submissionId);
+}
+
+async function indexClientSubmission(env, clientId, submissionId) {
+    const id = trimField(clientId, 128);
+    if (!id || id === 'anonymous') return;
+    const key = `ps:client:${id}`;
+    const raw = await env.HEARTBEATS.get(key);
+    let ids = [];
+    try { ids = raw ? JSON.parse(raw) : []; } catch { ids = []; }
+    ids = [submissionId, ...ids.filter(x => x !== submissionId)].slice(0, 50);
+    await env.HEARTBEATS.put(key, JSON.stringify(ids), { expirationTtl: SUBMIT_STORE_TTL });
+}
+
+function parseSubmitTags(raw) {
+    const allowed = new Set(['pvp', 'cit', 'swords', 'armor']);
+    const out = [];
+    for (const part of String(raw ?? '').split(/[,;]+/)) {
+        const t = part.trim().toLowerCase();
+        if (allowed.has(t) && !out.includes(t)) out.push(t);
+    }
+    return out;
 }
 
 async function loadPendingSubmission(env, submissionId) {
@@ -876,6 +946,9 @@ async function finalizeSubmission(env, submissionId, status, extra = {}) {
 
 function buildCatalogEntry(meta, filename, packUrl, catalogId) {
     const author = meta.authorName || 'Community';
+    const tagList = Array.isArray(meta.tags) && meta.tags.length
+        ? [...new Set([...meta.tags, 'community'])]
+        : ['community', 'pvp'];
     return {
         id: catalogId,
         name: meta.packName,
@@ -884,13 +957,15 @@ function buildCatalogEntry(meta, filename, packUrl, catalogId) {
         author_id: slugifyPackId(author, 32),
         showcase_path: '',
         pack_url: packUrl,
-        tags: ['community', 'pvp'],
+        tags: tagList,
         is_zip: true,
         has_local_file: false,
         star_count: 0,
         downloads: 0,
         sha256: '',
         viewer_starred: false,
+        featured: false,
+        featured_until: 0,
     };
 }
 
@@ -950,6 +1025,15 @@ async function publishApprovedPack(env, meta, zipBytes, filename) {
     const existingIdx = packs.findIndex(p => p.id === catalogId);
     if (existingIdx >= 0) packs[existingIdx] = entry;
     else packs.push(entry);
+
+    const weekSec = 7 * 24 * 3600;
+    const featuredUntil = Math.floor(Date.now() / 1000) + weekSec;
+    for (const p of packs) {
+        p.featured = false;
+        p.featured_until = 0;
+    }
+    entry.featured = true;
+    entry.featured_until = featuredUntil;
 
     const pretty = JSON.stringify(packs, null, 4) + '\n';
     const catalogRes = await ghRequest(
@@ -1036,6 +1120,9 @@ async function handlePackReviewCommand(interaction, env, ctx, action) {
                 ? await runPackApprove(interaction, env, submissionId)
                 : await runPackDeny(interaction, env, submissionId, reason);
             await discordPatchFollowup(env, interaction.token, payload);
+            if (action === 'approve') {
+                await refreshLeaderboardIfConfigured(env);
+            }
         } catch (err) {
             console.warn(`/pack-${action} failed:`, err.message ?? err);
             await discordPatchFollowup(env, interaction.token, {
@@ -1091,6 +1178,7 @@ async function handlePackSubmit(request, env) {
         contact: trimField(form.get('contact'), 64),
         packId: trimField(form.get('packId'), 128),
         clientId: clientId || 'anonymous',
+        tags: parseSubmitTags(form.get('tags')),
     };
 
     let filename = 'pack.zip';
@@ -1119,6 +1207,345 @@ async function handlePackSubmit(request, env) {
     }, { status: 201 });
 }
 
+async function handleSubmitStatus(request, env) {
+    const url = new URL(request.url);
+    const clientId = trimField(url.searchParams.get('clientId'), 128);
+    if (!clientId) {
+        return json({ error: 'missing_client_id', message: 'clientId query param required.' }, { status: 400 });
+    }
+
+    const key = `ps:client:${clientId}`;
+    const raw = await env.HEARTBEATS.get(key);
+    let ids = [];
+    try { ids = raw ? JSON.parse(raw) : []; } catch { ids = []; }
+
+    const submissions = [];
+    for (const sid of ids) {
+        const metaRaw = await env.HEARTBEATS.get(`ps:meta:${sid}`);
+        if (!metaRaw) continue;
+        const meta = JSON.parse(metaRaw);
+        submissions.push({
+            submissionId: meta.submissionId,
+            packName: meta.packName,
+            status: meta.status || 'pending',
+            submittedAt: meta.submittedAt || '',
+            resolvedAt: meta.resolvedAt || '',
+            catalogId: meta.catalogId || '',
+            packUrl: meta.packUrl || '',
+            denyReason: meta.denyReason || '',
+            tags: meta.tags || [],
+        });
+    }
+    return json({ submissions });
+}
+
+function voterIdFromRequest(request) {
+    const voter = trimField(request.headers.get('X-SlothyHub-Voter'), 128);
+    if (!voter || voter.length < 8 || !/^[A-Za-z0-9_\-:.]+$/.test(voter)) return null;
+    return voter;
+}
+
+function packIdFromBody(body) {
+    const id = trimField(body?.packId ?? body?.pack_id, 128);
+    if (!id || !/^[A-Za-z0-9_\-:.]+$/.test(id)) return null;
+    return id;
+}
+
+async function readStarCount(env, packId) {
+    const raw = await env.HEARTBEATS.get(`${STAR_COUNT_PREFIX}${packId}`);
+    const n = raw ? parseInt(raw, 10) : 0;
+    return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+async function readVoterStars(env, voterId) {
+    const raw = await env.HEARTBEATS.get(`ps:star:voter:${voterId}`);
+    try {
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+    } catch {
+        return [];
+    }
+}
+
+async function recordVoterStar(env, voterId, packId) {
+    const key = `ps:star:voter:${voterId}`;
+    const ids = await readVoterStars(env, voterId);
+    if (ids.includes(packId)) return;
+    ids.push(packId);
+    await env.HEARTBEATS.put(key, JSON.stringify(ids));
+}
+
+async function removeVoterStar(env, voterId, packId) {
+    const key = `ps:star:voter:${voterId}`;
+    const ids = await readVoterStars(env, voterId);
+    const next = ids.filter(id => id !== packId);
+    if (next.length === 0) await env.HEARTBEATS.delete(key);
+    else await env.HEARTBEATS.put(key, JSON.stringify(next));
+}
+
+async function checkStarRate(env, voterId) {
+    const key = `${STAR_RATE_PREFIX}${voterId}`;
+    const raw = await env.HEARTBEATS.get(key);
+    const count = raw ? parseInt(raw, 10) : 0;
+    if (count >= STAR_RATE_MAX) {
+        return json({
+            error: 'rate_limited',
+            message: 'Too many stars too fast — try again in a minute.',
+        }, { status: 429 });
+    }
+    await env.HEARTBEATS.put(key, String(count + 1), { expirationTtl: STAR_RATE_TTL });
+    return null;
+}
+
+async function handlePackStar(request, env) {
+    const voterId = voterIdFromRequest(request);
+    if (!voterId) {
+        return json({ error: 'missing_voter', message: 'X-SlothyHub-Voter header required.' }, { status: 400 });
+    }
+
+    let body;
+    try { body = await request.json(); } catch { body = {}; }
+    const packId = packIdFromBody(body);
+    if (!packId) {
+        return json({ error: 'missing_pack_id', message: 'packId required.' }, { status: 400 });
+    }
+
+    const voteKey = `${STAR_VOTE_PREFIX}${voterId}:${packId}`;
+    const countKey = `${STAR_COUNT_PREFIX}${packId}`;
+    const already = await env.HEARTBEATS.get(voteKey);
+    const count = await readStarCount(env, packId);
+
+    if (already) {
+        const rateBlock = await checkStarRate(env, voterId);
+        if (rateBlock) return rateBlock;
+
+        await env.HEARTBEATS.delete(voteKey);
+        const newCount = Math.max(0, count - 1);
+        if (newCount === 0) await env.HEARTBEATS.delete(countKey);
+        else await env.HEARTBEATS.put(countKey, String(newCount));
+        await removeVoterStar(env, voterId, packId);
+        return json({ star_count: newCount, viewer_starred: false }, { status: 200 });
+    }
+
+    const rateBlock = await checkStarRate(env, voterId);
+    if (rateBlock) return rateBlock;
+
+    await env.HEARTBEATS.put(voteKey, '1');
+    const newCount = count + 1;
+    await env.HEARTBEATS.put(countKey, String(newCount));
+    await recordVoterStar(env, voterId, packId);
+    return json({ star_count: newCount, viewer_starred: true }, { status: 201 });
+}
+
+async function handlePackStars(request, env) {
+    const voterId = voterIdFromRequest(request);
+    const url = new URL(request.url);
+    const idsParam = trimField(url.searchParams.get('ids'), 8000);
+    const ids = idsParam
+        ? idsParam.split(',').map(s => s.trim()).filter(Boolean).slice(0, 500)
+        : [];
+
+    const counts = {};
+    if (ids.length > 0) {
+        await Promise.all(ids.map(async (packId) => {
+            if (!/^[A-Za-z0-9_\-:.]+$/.test(packId)) return;
+            const c = await readStarCount(env, packId);
+            if (c > 0) counts[packId] = c;
+        }));
+    } else {
+        const countsList = await env.HEARTBEATS.list({ prefix: STAR_COUNT_PREFIX, limit: 1000 });
+        await Promise.all((countsList.keys ?? []).map(async (entry) => {
+            const packId = entry.name.slice(STAR_COUNT_PREFIX.length);
+            if (!packId) return;
+            counts[packId] = await readStarCount(env, packId);
+        }));
+    }
+
+    const starred = voterId ? await readVoterStars(env, voterId) : [];
+    return json({ counts, starred });
+}
+
+// Pack star leaderboard (Discord channel embed, auto-updated)
+
+async function fetchCatalogPacks(env) {
+    const res = await fetch(env.PACKS_JSON_URL, { headers: { 'User-Agent': USER_AGENT } });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+}
+
+async function loadAllStarCounts(env) {
+    const counts = {};
+    const countsList = await env.HEARTBEATS.list({ prefix: STAR_COUNT_PREFIX, limit: 1000 });
+    await Promise.all((countsList.keys ?? []).map(async (entry) => {
+        const packId = entry.name.slice(STAR_COUNT_PREFIX.length);
+        if (packId) counts[packId] = await readStarCount(env, packId);
+    }));
+    return counts;
+}
+
+async function buildLeaderboardEntries(env) {
+    const [catalog, starCounts] = await Promise.all([
+        fetchCatalogPacks(env),
+        loadAllStarCounts(env),
+    ]);
+    const seen = new Set();
+    const entries = catalog.map(p => {
+        const id = String(p.id ?? '').trim();
+        if (!id) return null;
+        seen.add(id);
+        return {
+            id,
+            name: String(p.name ?? id).trim() || id,
+            stars: starCounts[id] ?? Math.max(0, p.star_count ?? 0),
+        };
+    }).filter(Boolean);
+
+    for (const [id, stars] of Object.entries(starCounts)) {
+        if (seen.has(id)) continue;
+        entries.push({ id, name: id, stars });
+    }
+
+    entries.sort((a, b) => b.stars - a.stars || a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+    return entries;
+}
+
+function leaderboardRankLabel(rank) {
+    if (rank === 1) return '🥇';
+    if (rank === 2) return '🥈';
+    if (rank === 3) return '🥉';
+    return `\`${String(rank).padStart(2, ' ')}\``;
+}
+
+function topLeaderboardEntries(entries) {
+    return entries.slice(0, LEADERBOARD_TOP_N);
+}
+
+function hashLeaderboardEntries(entries) {
+    return topLeaderboardEntries(entries).map(e => `${e.id}:${e.stars}`).join('|');
+}
+
+function buildLeaderboardEmbed(entries) {
+    const top = topLeaderboardEntries(entries);
+    const lines = top.length
+        ? top.map((e, i) => `${leaderboardRankLabel(i + 1)} **${e.name}** — ★ ${fmt(e.stars)}`)
+        : ['_No packs in the catalog yet._'];
+
+    const description = lines.join('\n');
+
+    return {
+        title: '⭐ Pack Leaderboard — Top 10',
+        color: ACCENT,
+        description,
+        footer: { text: 'Top 10 by community stars · updates when players star packs in-game' },
+        timestamp: new Date().toISOString(),
+    };
+}
+
+async function readLeaderboardConfig(env) {
+    const raw = await env.HEARTBEATS.get(LEADERBOARD_CONFIG_KEY);
+    if (!raw) return null;
+    try {
+        const cfg = JSON.parse(raw);
+        if (cfg?.channelId && cfg?.messageId) return cfg;
+    } catch { /* ignore */ }
+    return null;
+}
+
+async function saveLeaderboardConfig(env, channelId, messageId) {
+    await env.HEARTBEATS.put(
+        LEADERBOARD_CONFIG_KEY,
+        JSON.stringify({ channelId, messageId, updatedAt: new Date().toISOString() }),
+    );
+}
+
+async function setupLeaderboardInChannel(env, channelId) {
+    const id = trimField(channelId, 32);
+    if (!id) throw new Error('channelId required');
+
+    const entries = await buildLeaderboardEntries(env);
+    const embed = buildLeaderboardEmbed(entries);
+    const appId = env.DISCORD_APP_ID;
+
+    const listRes = await discordBotRequest(env, 'GET', `/channels/${id}/messages?limit=50`);
+    if (listRes.ok) {
+        const msgs = await listRes.json();
+        for (const msg of msgs) {
+            const title = msg.embeds?.[0]?.title ?? '';
+            if (msg.author?.id === appId && title.includes('Leaderboard')) {
+                await discordBotRequest(env, 'DELETE', `/channels/${id}/messages/${msg.id}`);
+            }
+        }
+    }
+
+    const postRes = await discordBotRequest(env, 'POST', `/channels/${id}/messages`, { embeds: [embed] });
+    if (!postRes.ok) {
+        throw new Error(`POST leaderboard HTTP ${postRes.status}: ${(await postRes.text()).slice(0, 200)}`);
+    }
+    const posted = await postRes.json();
+    await saveLeaderboardConfig(env, id, posted.id);
+    await env.HEARTBEATS.put(LEADERBOARD_HASH_KEY, hashLeaderboardEntries(entries));
+    try { await discordBotPut(env, `/channels/${id}/pins/${posted.id}`); } catch { /* optional */ }
+    return { channelId: id, messageId: posted.id, packCount: entries.length, pinned: true };
+}
+
+async function refreshLeaderboard(env) {
+    const cfg = await readLeaderboardConfig(env);
+    if (!cfg) return { ok: false, reason: 'not_configured' };
+
+    const entries = await buildLeaderboardEntries(env);
+    const embed = buildLeaderboardEmbed(entries);
+    const hash = hashLeaderboardEntries(entries);
+    const prevHash = await env.HEARTBEATS.get(LEADERBOARD_HASH_KEY);
+    if (prevHash === hash) return { ok: true, skipped: true };
+
+    const patchRes = await discordBotRequest(
+        env, 'PATCH',
+        `/channels/${cfg.channelId}/messages/${cfg.messageId}`,
+        { embeds: [embed] },
+    );
+    if (patchRes.ok) {
+        await env.HEARTBEATS.put(LEADERBOARD_HASH_KEY, hash);
+        return { ok: true, updated: true, packCount: entries.length };
+    }
+    if (patchRes.status === 404) {
+        const setup = await setupLeaderboardInChannel(env, cfg.channelId);
+        return { ok: true, recreated: true, ...setup };
+    }
+    console.warn('leaderboard PATCH', patchRes.status, (await patchRes.text()).slice(0, 200));
+    return { ok: false, status: patchRes.status };
+}
+
+async function refreshLeaderboardIfConfigured(env) {
+    const cfg = await readLeaderboardConfig(env);
+    if (cfg) await refreshLeaderboard(env);
+}
+
+async function handleSetupLeaderboard(request, env) {
+    const ownerId = trimField(env.PACK_REVIEW_OWNER_USER_ID, 32);
+    const key = trimField(request.headers.get('X-Admin-Key'), 64);
+    if (!ownerId || key !== ownerId) {
+        return new Response('forbidden', { status: 403 });
+    }
+
+    let channelId = trimField(env.LEADERBOARD_CHANNEL_ID, 32);
+    try {
+        const body = await request.json();
+        if (body?.channelId) channelId = trimField(body.channelId, 32);
+    } catch { /* optional body */ }
+
+    if (!channelId) {
+        return json({ ok: false, error: 'channelId required (body or LEADERBOARD_CHANNEL_ID)' }, { status: 400 });
+    }
+
+    try {
+        const result = await setupLeaderboardInChannel(env, channelId);
+        return json({ ok: true, ...result });
+    } catch (err) {
+        return json({ ok: false, error: (err.message ?? String(err)).slice(0, 300) }, { status: 500 });
+    }
+}
+
 const PERM_ADMINISTRATOR = '8';
 
 const SLASH_COMMANDS = [
@@ -1127,6 +1554,12 @@ const SLASH_COMMANDS = [
     {
         name: 'setup',
         description: '[Admins] Post the persistent download button in this channel.',
+        default_member_permissions: PERM_ADMINISTRATOR,
+        dm_permission: false,
+    },
+    {
+        name: 'setup-leaderboard',
+        description: '[Admins] Post a live pack star leaderboard in this channel.',
         default_member_permissions: PERM_ADMINISTRATOR,
         dm_permission: false,
     },
@@ -1208,6 +1641,187 @@ async function handleRegisterCommands(request, env) {
         return json({ ok: false, error: (err.message ?? String(err)).slice(0, 300) }, { status: 500 });
     }
 }
+
+/** VIEW + READ_HISTORY + ADD_REACTIONS (no SEND) for @everyone */
+const PERM_VIEW_REACT = '66624';
+/** VIEW + SEND + READ + embed + attach */
+const PERM_STAFF_SEND = '117760';
+/** Staff + MANAGE_MESSAGES (prune bad reactions, pin) */
+const PERM_BOT_STAFF = '126976';
+
+function buildModSuggestionsTemplatePayload() {
+    return {
+        content: [
+            '📋 **Mod suggestions**',
+            '',
+            'Only **staff** can post here. Everyone else: read and vote with **✅** only.',
+            '',
+            'When you post a real suggestion, copy the format below.',
+        ].join('\n'),
+        embeds: [{
+            title: '✅ Example: Add pack tags in the upload form',
+            color: ACCENT,
+            description: 'Example suggestion — not a live request.',
+            fields: [
+                {
+                    name: 'What',
+                    value: 'Let uploaders pick tags (PvP, CIT, swords) when submitting a pack.',
+                    inline: false,
+                },
+                {
+                    name: 'Why',
+                    value: 'Makes `/pack-approve` faster and helps players filter community packs.',
+                    inline: false,
+                },
+                {
+                    name: 'MC versions',
+                    value: 'All tiers (1.20 – 1.21.11)',
+                    inline: true,
+                },
+                {
+                    name: 'Priority',
+                    value: 'Nice to have',
+                    inline: true,
+                },
+                {
+                    name: 'Voting',
+                    value: 'React with **✅** below if you want this. One ✅ per person — no other emoji.',
+                    inline: false,
+                },
+            ],
+            footer: { text: "Slothy's Tree · mod suggestions" },
+            timestamp: new Date().toISOString(),
+        }],
+    };
+}
+
+async function setupSuggestionsChannel(env, channelId) {
+    const ownerId = trimField(env.PACK_REVIEW_OWNER_USER_ID, 32);
+    const botId = trimField(env.DISCORD_APP_ID, 32);
+    const id = trimField(channelId, 32);
+    if (!id) throw new Error('channelId required');
+
+    const chRes = await discordBotRequest(env, 'GET', `/channels/${id}`);
+    if (!chRes.ok) {
+        throw new Error(`GET channel HTTP ${chRes.status}: ${(await chRes.text()).slice(0, 160)}`);
+    }
+    const channel = await chRes.json();
+    const guildId = channel.guild_id;
+    if (!guildId) throw new Error('Channel is not in a server');
+
+    const everyoneDeny = channel.type === 15 ? '34359740416' : '2048'; // forum: no posts; text: no send
+    const staffAllow = channel.type === 15 ? '34359856128' : PERM_STAFF_SEND; // forum: send + create posts
+    const botAllow = channel.type === 15 ? '34359864320' : PERM_BOT_STAFF; // + manage messages
+
+    const overwriteMap = new Map((channel.permission_overwrites ?? []).map(o => [o.id, o]));
+    overwriteMap.set(guildId, { id: guildId, type: 0, allow: PERM_VIEW_REACT, deny: everyoneDeny });
+    if (ownerId) {
+        overwriteMap.set(ownerId, { id: ownerId, type: 1, allow: staffAllow, deny: '0' });
+    }
+    if (botId) {
+        overwriteMap.set(botId, { id: botId, type: 1, allow: botAllow, deny: '0' });
+    }
+
+    const patchBody = {
+        topic: 'Mod suggestions — staff post ideas; members vote with ✅ only.',
+        permission_overwrites: [...overwriteMap.values()],
+    };
+    // Forum: only staff create posts; everyone can view/react inside threads.
+    if (channel.type === 15) {
+        patchBody.default_auto_archive_duration = 10080;
+        patchBody.default_reaction_emoji = { name: '✅' };
+        patchBody.default_thread_rate_limit_per_user = 0;
+    }
+
+    const patchRes = await discordBotRequest(env, 'PATCH', `/channels/${id}`, patchBody);
+    if (!patchRes.ok) {
+        throw new Error(`PATCH channel HTTP ${patchRes.status}: ${(await patchRes.text()).slice(0, 200)}`);
+    }
+
+    const payload = buildModSuggestionsTemplatePayload();
+    const appId = botId;
+    let targetChannelId = id;
+    let posted;
+
+    if (channel.type === 15) {
+        // Forum channel — create a starter post (thread).
+        const threadRes = await discordBotRequest(env, 'POST', `/channels/${id}/threads`, {
+            name: 'Example mod suggestion template',
+            auto_archive_duration: 10080,
+            message: payload,
+        });
+        if (!threadRes.ok) {
+            throw new Error(`POST forum thread HTTP ${threadRes.status}: ${(await threadRes.text()).slice(0, 200)}`);
+        }
+        posted = await threadRes.json();
+        targetChannelId = posted.id;
+    } else if (channel.type === 0 || channel.type === 5) {
+        const listRes = await discordBotRequest(env, 'GET', `/channels/${id}/messages?limit=50`);
+        if (listRes.ok) {
+            const messages = await listRes.json();
+            for (const msg of messages) {
+                if (msg.author?.id === appId && msg.embeds?.length) {
+                    await discordBotRequest(env, 'DELETE', `/channels/${id}/messages/${msg.id}`);
+                }
+            }
+        }
+        const postRes = await discordBotRequest(env, 'POST', `/channels/${id}/messages`, payload);
+        if (!postRes.ok) {
+            throw new Error(`POST message HTTP ${postRes.status}: ${(await postRes.text()).slice(0, 200)}`);
+        }
+        posted = await postRes.json();
+    } else {
+        throw new Error(`Unsupported channel type ${channel.type} — use a text, announcement, or forum channel`);
+    }
+
+    const messageId = posted.id ?? posted.message?.id;
+    if (!messageId) throw new Error('Could not resolve posted message id');
+
+    const reactRes = await discordBotPut(
+        env,
+        `/channels/${targetChannelId}/messages/${messageId}/reactions/${encodeURIComponent('✅')}/@me`,
+    );
+    if (!reactRes.ok && reactRes.status !== 204) {
+        console.warn('Could not add ✅ reaction:', reactRes.status, await reactRes.text());
+    }
+
+    if (channel.type !== 15) {
+        await discordBotPut(env, `/channels/${id}/pins/${messageId}`);
+    }
+
+    return {
+        channelId: id,
+        channelType: channel.type,
+        messageId,
+        threadId: channel.type === 15 ? targetChannelId : null,
+        pinned: channel.type !== 15,
+    };
+}
+
+async function handleSetupSuggestions(request, env) {
+    const ownerId = trimField(env.PACK_REVIEW_OWNER_USER_ID, 32);
+    const key = trimField(request.headers.get('X-Admin-Key'), 64);
+    if (!ownerId || key !== ownerId) {
+        return new Response('forbidden', { status: 403 });
+    }
+
+    let channelId = trimField(env.SUGGESTIONS_CHANNEL_ID, 32);
+    try {
+        const body = await request.json();
+        if (body?.channelId) channelId = trimField(body.channelId, 32);
+    } catch { /* optional body */ }
+
+    if (!channelId) {
+        return json({ ok: false, error: 'channelId required (body or SUGGESTIONS_CHANNEL_ID)' }, { status: 400 });
+    }
+
+    try {
+        const result = await setupSuggestionsChannel(env, channelId);
+        return json({ ok: true, ...result });
+    } catch (err) {
+        return json({ ok: false, error: (err.message ?? String(err)).slice(0, 300) }, { status: 500 });
+    }
+}
 // Main entry point
 
 export default {
@@ -1226,8 +1840,27 @@ export default {
         if (request.method === 'POST' && url.pathname === '/v1/pack-submit') {
             return handlePackSubmit(request, env);
         }
+        if (request.method === 'GET' && url.pathname === '/v1/submit-status') {
+            return handleSubmitStatus(request, env);
+        }
+        if (request.method === 'POST' && url.pathname === '/v1/pack-star') {
+            const res = await handlePackStar(request, env);
+            ctx.waitUntil(refreshLeaderboardIfConfigured(env).catch(err => {
+                console.warn('leaderboard refresh:', err.message ?? err);
+            }));
+            return res;
+        }
+        if (request.method === 'GET' && url.pathname === '/v1/pack-stars') {
+            return handlePackStars(request, env);
+        }
         if (request.method === 'POST' && url.pathname === '/v1/register-commands') {
             return handleRegisterCommands(request, env);
+        }
+        if (request.method === 'POST' && url.pathname === '/v1/setup-suggestions') {
+            return handleSetupSuggestions(request, env);
+        }
+        if (request.method === 'POST' && url.pathname === '/v1/setup-leaderboard') {
+            return handleSetupLeaderboard(request, env);
         }
 
         if (request.method === 'POST' && (url.pathname === '/' || url.pathname === '/interactions')) {

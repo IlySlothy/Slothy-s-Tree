@@ -578,7 +578,8 @@ public abstract class SlothyHubScreenBase extends class_437 {
 
         // Badge fills before custom textures — drawTexture leaves UV state that breaks fills on 1.21.4
         String badge; int badgeBg, badgeFg;
-        if (applied)         { badge = "HANGING";  badgeBg = col(Ui.COL_ACCENT & 0xFFFFFF, 35); badgeFg = Ui.COL_ACCENT; }
+        if (pack.isFeatured())   { badge = "FEATURED"; badgeBg = col(0xFFD54F, 45); badgeFg = col(0xFFD54F, 255); }
+        else if (applied)         { badge = "HANGING";  badgeBg = col(Ui.COL_ACCENT & 0xFFFFFF, 35); badgeFg = Ui.COL_ACCENT; }
         else if (pack.isLocal()) { badge = "LOCAL"; badgeBg = col(0x8a6a3a, 30); badgeFg = col(0xc89a60, 220); }
         else {
             List<String> tags = pack.getTags();
@@ -989,21 +990,36 @@ public abstract class SlothyHubScreenBase extends class_437 {
     }
 
     private void handleStar(Pack pack) {
-        if (pack.isViewerStarred() || !starInFlight.add(pack.getId())) return;
-        String srv = SlothyConfig.getServerUrl();
-        if (srv == null || srv.isBlank()) { starInFlight.remove(pack.getId()); return; }
+        if (pack.isLocal() || !starInFlight.add(pack.getId())) return;
+        if (SlothyConfig.getWorkerBaseUrl().isBlank()) {
+            starInFlight.remove(pack.getId());
+            dlMsg.put(pack.getId(), "Star server is not configured.");
+            return;
+        }
+        boolean wasStarred = pack.isViewerStarred();
         int prev = pack.getStarCount();
-        pack.setStarCount(prev + 1); pack.setViewerStarred(true); invalidateCache();
+        if (!wasStarred) Ui.playStar();
+        pack.setStarCount(wasStarred ? Math.max(0, prev - 1) : prev + 1);
+        pack.setViewerStarred(!wasStarred);
+        invalidateCache();
         executor.submit(() -> {
             try {
-                PackApiClient.StarResult res = PackApiClient.starPack(srv, pack);
+                PackApiClient.StarResult res = PackApiClient.starPack(pack);
                 class_310.method_1551().execute(() -> {
-                    pack.setStarCount(res.starCount()); invalidateCache();
+                    pack.setStarCount(res.starCount());
+                    pack.setViewerStarred(res.viewerStarred());
+                    invalidateCache();
                     starInFlight.remove(pack.getId());
                 });
             } catch (Exception e) {
+                String msg = e.getMessage();
+                if (msg == null || msg.isBlank()) msg = "Star failed.";
+                String fm = msg;
                 class_310.method_1551().execute(() -> {
-                    pack.setStarCount(prev); pack.setViewerStarred(false); invalidateCache();
+                    pack.setStarCount(prev);
+                    pack.setViewerStarred(wasStarred);
+                    invalidateCache();
+                    dlMsg.put(pack.getId(), fm);
                     starInFlight.remove(pack.getId());
                 });
             }
@@ -1133,6 +1149,7 @@ public abstract class SlothyHubScreenBase extends class_437 {
             out.add(p);
         }
         if (SlothyConfig.isSortByStars()) out.sort((a, b) -> Integer.compare(b.getStarCount(), a.getStarCount()));
+        out.sort((a, b) -> Boolean.compare(b.isFeatured(), a.isFeatured()));
         filteredCache = out; filteredSrc = allPacks; filteredKey = key;
         return filteredCache;
     }

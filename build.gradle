@@ -70,16 +70,33 @@ jar {
 def featherMods118 = 'C:/Users/newbr/AppData/Roaming/.feather/user-mods/1.21.8-fabric'
 def featherMods111 = 'C:/Users/newbr/AppData/Roaming/.feather/user-mods/1.21.11-fabric'
 
+def releaseJar118 = "slothyhub-${project.mod_version}.jar"
+def releaseJar111 = "slothyhub-${project.mod_version.replace('-mc1.21.8', '-mc1.21.11')}.jar"
+def releaseCit111 = "slothyhub-cit-${project.mod_version.replace('-mc1.21.8', '-mc1.21.11')}.jar"
+def releaseJar201 = "slothyhub-${project(':slothyhub-legacy-1.21.4').version}.jar"
+def releaseCitLegacy = "slothyhub-legacy-cit-${project.mod_version}-legacy.jar"
+
+ext.modrinthChangelog = '''### v1.0.5
+- Star / unstar packs in the Pack Browser (live community counts)
+- Featured pack, upload tags, My Uploads dashboard, What's New screen
+- Texture Builder: fixed hang on resource pack scan
+- Discord: top-10 pack star leaderboard (`/setup-leaderboard`)
+
+Catalog: https://ilyslothy.github.io/Slothy-s-Tree'''
+
 modrinth {
     token = rootProject.ext.modrinthToken
     projectId = rootProject.ext.modrinthProjectId
     versionNumber = "${project.version}+${new Date().format('yyyyMMddHHmm')}"
     versionName = "SlothyHub ${project.version}"
     versionType = 'release'
-    changelog = 'Pack upload requests, fixed upload form UI, Discord approve/deny for community packs.'
+    changelog = rootProject.ext.modrinthChangelog
     uploadFile = tasks.remapJar
     gameVersions = ['1.21.8']
     loaders = ['fabric']
+    dependencies {
+        required.project 'fabric-api'
+    }
 }
 
 tasks.register('publishModrinth') {
@@ -102,29 +119,34 @@ tasks.register('copyReleaseAssets') {
     doLast {
         def dest = file('release-assets')
         dest.mkdirs()
+        def jar118 = "slothyhub-${project.mod_version}.jar"
+        def jar111 = "slothyhub-${project.mod_version.replace('-mc1.21.8', '-mc1.21.11')}.jar"
+        def cit111 = "slothyhub-cit-${project.mod_version.replace('-mc1.21.8', '-mc1.21.11')}.jar"
+        def jar201 = "slothyhub-${project(':slothyhub-legacy-1.21.4').version}.jar"
+        def citLegacy = "slothyhub-legacy-cit-${project.mod_version}-legacy.jar"
         copy {
             from layout.buildDirectory.dir('libs')
-            include 'slothyhub-1.0.4-mc1.21.8.jar'
+            include jar118
             into dest
         }
         copy {
             from project(':slothyhub-1.21.11').layout.buildDirectory.dir('libs')
-            include 'slothyhub-1.0.4-mc1.21.11.jar'
+            include jar111
             into dest
         }
         copy {
             from project(':modern-cit').layout.buildDirectory.dir('libs')
-            include 'slothyhub-cit-1.0.4-mc1.21.11.jar'
+            include cit111
             into dest
         }
         copy {
             from project(':slothyhub-legacy-1.21.4').layout.buildDirectory.dir('libs')
-            include 'slothyhub-1.0.4-mc1.20-1.21.1.jar'
+            include jar201
             into dest
         }
         copy {
             from project(':legacy-cit').layout.buildDirectory.dir('libs')
-            include 'slothyhub-legacy-cit-1.0.4-mc1.21.8-legacy.jar'
+            include citLegacy
             into dest
         }
     }
@@ -137,7 +159,7 @@ tasks.register('copyFeatherMods118') {
         dest.mkdirs()
         copy {
             from layout.buildDirectory.dir('libs')
-            include 'slothyhub-1.0.4-mc1.21.8.jar'
+            include releaseJar118
             into dest
         }
     }
@@ -150,12 +172,12 @@ tasks.register('copyFeatherMods111') {
         dest.mkdirs()
         copy {
             from project(':slothyhub-1.21.11').layout.buildDirectory.dir('libs')
-            include 'slothyhub-1.0.4-mc1.21.11.jar'
+            include releaseJar111
             into dest
         }
         copy {
             from project(':modern-cit').layout.buildDirectory.dir('libs')
-            include 'slothyhub-cit-1.0.4-mc1.21.11.jar'
+            include releaseCit111
             into dest
         }
     }

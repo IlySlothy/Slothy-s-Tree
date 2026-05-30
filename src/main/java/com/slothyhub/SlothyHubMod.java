@@ -26,6 +26,7 @@ import net.minecraft.class_304;
 import net.minecraft.class_310;
 import net.minecraft.class_3468;
 import net.minecraft.class_433;
+import net.minecraft.class_437;
 import net.minecraft.class_442;
 import net.minecraft.class_4185;
 import net.minecraft.class_3675.class_307;
@@ -75,7 +76,7 @@ public class SlothyHubMod implements ClientModInitializer {
             if (openKey != null) {
                 while (openKey.method_1436()) {
                     if (client.field_1755 == null) {
-                        client.method_1507(new SlothyHubScreen(null));
+                        openHub(client);
                     }
                 }
                 if (SlothyConfig.isKillEffectEnabled() && client.field_1724 != null) {
@@ -119,22 +120,35 @@ public class SlothyHubMod implements ClientModInitializer {
                 ScreenMouseEvents.beforeMouseScroll(screen).register(
                     (scr, mx, my, hDelta, vDelta) -> libraryScreen.onScrollDelta(vDelta));
             }
+            if (screen instanceof UploadDashboardScreen uploadScreen) {
+                ScreenMouseEvents.beforeMouseScroll(screen).register(
+                    (scr, mx, my, hDelta, vDelta) -> uploadScreen.onScrollDelta(vDelta));
+            }
             if (screen instanceof class_442 titleScreen) {
                 class_4185 btn = class_4185.method_46430(
                         class_2561.method_43470("\uD83E\uDD8A SlothyHub"),
-                        b -> client.method_1507(new SlothyHubScreen(titleScreen)))
+                        b -> openHub(client))
                     .method_46434(scaledW / 2 + 104, scaledH / 4 + 96 + 12, 80, 20)
                     .method_46431();
                 net.fabricmc.fabric.api.client.screen.v1.Screens.getButtons(titleScreen).add(btn);
             } else if (screen instanceof class_433 pauseScreen) {
                 class_4185 btn = class_4185.method_46430(
                         class_2561.method_43470("\uD83E\uDD8A SlothyHub"),
-                        b -> client.method_1507(new SlothyHubScreen(pauseScreen)))
+                        b -> openHub(client))
                     .method_46434(scaledW / 2 - 100, scaledH / 4 + 160 + 24, 200, 20)
                     .method_46431();
                 net.fabricmc.fabric.api.client.screen.v1.Screens.getButtons(pauseScreen).add(btn);
             }
         });
+    }
+
+    private static void openHub(class_310 client) {
+        class_437 parent = client.field_1755;
+        if (SlothyConfig.shouldShowWhatsNew()) {
+            client.method_1507(new WhatsNewScreen(new SlothyHubScreen(parent)));
+        } else {
+            client.method_1507(new SlothyHubScreen(parent));
+        }
     }
 
     private static class_304 createKeyBinding(String id, class_307 type, int code, String category) {

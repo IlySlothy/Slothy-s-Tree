@@ -11,9 +11,12 @@ import java.lang.reflect.Type;
 import java.net.HttpURLConnection;
 import java.net.SocketTimeoutException;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public class PackApiClient {
 
@@ -24,14 +27,68 @@ public class PackApiClient {
         IOException last = null;
         for (String path : new String[]{"/api/packs.json", "/api/packs"}) {
             try {
-                return PackCatalog.mergeWithEmbedded(fetchPacksFrom(serverUrl + path));
+                List<Pack> packs = PackCatalog.mergeWithEmbedded(fetchPacksFrom(serverUrl + path));
+                applyStarData(packs);
+                return packs;
             } catch (IOException e) {
                 last = e;
             }
         }
         List<Pack> embedded = PackCatalog.loadEmbedded();
-        if (!embedded.isEmpty()) return embedded;
+        if (!embedded.isEmpty()) {
+            applyStarData(embedded);
+            return embedded;
+        }
         throw last != null ? last : new IOException("Could not load pack catalog from " + serverUrl);
+    }
+
+    /** Merge live star counts from the Cloudflare Worker (GitHub Pages catalog is static). */
+    private static void applyStarData(List<Pack> packs) {
+        if (packs == null || packs.isEmpty()) return;
+        String worker = SlothyConfig.getWorkerBaseUrl();
+        if (worker == null || worker.isBlank()) return;
+        try {
+            StringBuilder ids = new StringBuilder();
+            for (Pack pack : packs) {
+                if (pack.isLocal()) continue;
+                if (ids.length() > 0) ids.append(',');
+                ids.append(pack.getId());
+            }
+            String endpoint = worker + "/v1/pack-stars";
+            if (ids.length() > 0) {
+                endpoint += "?ids=" + URLEncoder.encode(ids.toString(), StandardCharsets.UTF_8);
+            }
+            HttpURLConnection conn = (HttpURLConnection) URI.create(endpoint).toURL().openConnection();
+            conn.setConnectTimeout(TIMEOUT_MS);
+            conn.setReadTimeout(TIMEOUT_MS);
+            conn.setRequestProperty("Accept", "application/json");
+            conn.setRequestProperty("User-Agent", "SlothyHub-Mod/1.0");
+            conn.setRequestProperty("X-SlothyHub-Voter", SlothyConfig.getVoterId());
+            if (conn.getResponseCode() != 200) return;
+            try (InputStream in = conn.getInputStream()) {
+                JsonObject root = GSON.fromJson(new String(in.readAllBytes(), StandardCharsets.UTF_8), JsonObject.class);
+                if (root == null) return;
+                JsonObject counts = root.has("counts") && root.get("counts").isJsonObject()
+                    ? root.getAsJsonObject("counts") : null;
+                Set<String> starred = new HashSet<>();
+                if (root.has("starred") && root.get("starred").isJsonArray()) {
+                    for (var el : root.getAsJsonArray("starred")) {
+                        if (el.isJsonPrimitive()) starred.add(el.getAsString());
+                    }
+                }
+                for (Pack pack : packs) {
+                    if (pack.isLocal()) continue;
+                    String id = pack.getId();
+                    if (counts != null && counts.has(id)) {
+                        int workerCount = counts.get(id).getAsInt();
+                        if (workerCount > pack.getStarCount()) pack.setStarCount(workerCount);
+                    }
+                    pack.setViewerStarred(starred.contains(id));
+                }
+            }
+        } catch (Exception e) {
+            SlothyHubMod.LOGGER.debug("Pack stars unavailable: {}", e.getMessage());
+        }
     }
 
     private static List<Pack> fetchPacksFrom(String endpoint) throws IOException {
@@ -61,30 +118,41 @@ public class PackApiClient {
         }
     }
 
-    public static StarResult starPack(String serverUrl, Pack pack) throws IOException {
-        String endpoint = pack.getStarUrl(serverUrl);
+    public static StarResult starPack(Pack pack) throws IOException {
+        String worker = SlothyConfig.getWorkerBaseUrl();
+        if (worker == null || worker.isBlank()) {
+            throw new IOException("Star server is not configured.");
+        }
+        String endpoint = worker + "/v1/pack-star";
         HttpURLConnection conn = (HttpURLConnection) URI.create(endpoint).toURL().openConnection();
         conn.setConnectTimeout(TIMEOUT_MS);
         conn.setReadTimeout(TIMEOUT_MS);
         conn.setRequestMethod("POST");
         conn.setRequestProperty("Accept", "application/json");
+        conn.setRequestProperty("Content-Type", "application/json");
         conn.setRequestProperty("User-Agent", "SlothyHub-Mod/1.0");
         conn.setRequestProperty("X-SlothyHub-Voter", SlothyConfig.getVoterId());
-        conn.setDoOutput(false);
+        conn.setDoOutput(true);
+        JsonObject body = new JsonObject();
+        body.addProperty("packId", pack.getId());
+        byte[] payload = body.toString().getBytes(StandardCharsets.UTF_8);
+        conn.setFixedLengthStreamingMode(payload.length);
+        try (OutputStream os = conn.getOutputStream()) { os.write(payload); }
         int code = conn.getResponseCode();
         if (code == 200 || code == 201) {
             try (InputStream in = conn.getInputStream()) {
                 String json = new String(in.readAllBytes(), StandardCharsets.UTF_8);
                 JsonObject obj = GSON.fromJson(json, JsonObject.class);
                 int newCount = obj != null && obj.has("star_count") ? obj.get("star_count").getAsInt() : pack.getStarCount();
-                return new StarResult(newCount, code == 201);
+                boolean starred = obj == null || !obj.has("viewer_starred") || obj.get("viewer_starred").getAsBoolean();
+                return new StarResult(newCount, starred);
             }
         } else if (code == 429) {
             throw new IOException("Too many stars too fast — try again in a minute.");
         } else if (code == 404) {
             throw new IOException("That pack is no longer available.");
         }
-        throw new IOException("Server returned HTTP " + code + " for /star.");
+        throw new IOException("Server returned HTTP " + code + " for /v1/pack-star.");
     }
 
     public static BuilderResourcesResponse fetchBuilderResources(String serverUrl, String category) throws IOException {
@@ -204,5 +272,5 @@ public class PackApiClient {
         public int total;
     }
 
-    public record StarResult(int starCount, boolean wasNew) {}
+    public record StarResult(int starCount, boolean viewerStarred) {}
 }

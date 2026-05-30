@@ -37,6 +37,12 @@ const commands = [
         dm_permission: false,
     },
     {
+        name: 'setup-leaderboard',
+        description: '[Admins] Post a live pack star leaderboard in this channel.',
+        default_member_permissions: PERM_ADMINISTRATOR,
+        dm_permission: false,
+    },
+    {
         name: 'invite',
         description: 'Get the bot invite link (add Slothy bot to another server).',
     },

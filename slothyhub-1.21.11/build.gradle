@@ -5,7 +5,7 @@ plugins {
 
 apply from: rootProject.file('gradle/modrinth.gradle')
 
-version = '1.0.4-mc1.21.11'
+version = '1.0.5-mc1.21.11'
 group = project.maven_group
 
 tasks.register('remapJar', Jar) {
@@ -44,10 +44,13 @@ modrinth {
     versionNumber = "${project.version}+${new Date().format('yyyyMMddHHmm')}"
     versionName = "SlothyHub ${project.version}"
     versionType = 'release'
-    changelog = 'Pack upload requests, fixed upload form UI, Discord approve/deny for community packs.'
+    changelog = rootProject.ext.modrinthChangelog
     uploadFile = tasks.named('remapJar')
     gameVersions = ['1.21.9', '1.21.10', '1.21.11']
     loaders = ['fabric']
+    dependencies {
+        required.project 'fabric-api'
+    }
 }
 
 artifacts {

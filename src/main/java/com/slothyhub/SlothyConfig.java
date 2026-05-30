@@ -2,7 +2,9 @@ package com.slothyhub;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.google.gson.reflect.TypeToken;
 import com.slothyhub.builder.ResourceScanHelper;
 import com.slothyhub.cit.CitEngine;
 import com.slothyhub.cit.CitRuleSet;
@@ -10,6 +12,8 @@ import com.slothyhub.cit.CitVirtualTextures;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import net.fabricmc.loader.api.FabricLoader;
@@ -57,6 +61,8 @@ public class SlothyConfig {
     // Kill effect assets from built/applied packs
     private static String killTotemTexture = "minecraft:item/totem_of_undying";
     private static String killTotemSound = "minecraft:item.totem.use";
+    private static String lastSeenChangelogVersion = "";
+    private static List<UploadTracker.Entry> uploadEntriesCache = new ArrayList<>();
 
     public static String getServerUrl() {
         return urlOverride != null && !urlOverride.isBlank() ? urlOverride : serverUrl;
@@ -90,6 +96,28 @@ public class SlothyConfig {
 
     public static void regenerateVoterId() {
         voterId = UUID.randomUUID().toString();
+        save();
+    }
+
+    public static boolean shouldShowWhatsNew() {
+        ChangelogData c = ChangelogData.load();
+        return c != null && !c.version().equals(lastSeenChangelogVersion);
+    }
+
+    public static void markChangelogSeen() {
+        ChangelogData c = ChangelogData.load();
+        if (c != null) {
+            lastSeenChangelogVersion = c.version();
+            save();
+        }
+    }
+
+    public static List<UploadTracker.Entry> loadUploadEntries() {
+        return new ArrayList<>(uploadEntriesCache);
+    }
+
+    public static void saveUploadEntries(List<UploadTracker.Entry> entries) {
+        uploadEntriesCache = new ArrayList<>(entries);
         save();
     }
 
@@ -245,6 +273,12 @@ public class SlothyConfig {
                 if (obj.has("themeBorder"))            themeBorder            = parseColor(obj.get("themeBorder").getAsString(), themeBorder);
                 if (obj.has("killTotemTexture"))       killTotemTexture       = obj.get("killTotemTexture").getAsString();
                 if (obj.has("killTotemSound"))         killTotemSound         = obj.get("killTotemSound").getAsString();
+                if (obj.has("lastSeenChangelogVersion")) lastSeenChangelogVersion = obj.get("lastSeenChangelogVersion").getAsString();
+                if (obj.has("uploadEntries")) {
+                    uploadEntriesCache = GSON.fromJson(obj.get("uploadEntries"),
+                        new TypeToken<List<UploadTracker.Entry>>(){}.getType());
+                    if (uploadEntriesCache == null) uploadEntriesCache = new ArrayList<>();
+                }
             }
             if (voterId == null || voterId.isBlank()) {
                 voterId = UUID.randomUUID().toString();
@@ -286,6 +320,8 @@ public class SlothyConfig {
         obj.addProperty("themeBorder",            colorHex(themeBorder));
         obj.addProperty("killTotemTexture",       killTotemTexture);
         obj.addProperty("killTotemSound",         killTotemSound);
+        obj.addProperty("lastSeenChangelogVersion", lastSeenChangelogVersion == null ? "" : lastSeenChangelogVersion);
+        obj.add("uploadEntries", GSON.toJsonTree(uploadEntriesCache != null ? uploadEntriesCache : List.of()));
         try {
             Files.writeString(CONFIG_PATH, GSON.toJson(obj));
         } catch (IOException e) {

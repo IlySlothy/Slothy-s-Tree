@@ -2,20 +2,26 @@ package com.slothyhub;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import com.google.gson.reflect.TypeToken;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.reflect.Type;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 
 /** Uploads a built pack zip to the SlothyHub worker for moderator review. */
 public final class PackSubmitClient {
 
     private static final Gson GSON = new Gson();
+    private static final Type STATUS_LIST = new TypeToken<List<SubmissionStatus>>(){}.getType();
     /** Discord bot attachment limit for most servers. */
     private static final int MAX_BYTES = 8 * 1024 * 1024;
     private static final int CONNECT_MS = 15_000;
@@ -29,10 +35,23 @@ public final class PackSubmitClient {
         String authorName,
         String contact,
         String packId,
-        String clientId
+        String clientId,
+        List<String> tags
     ) {}
 
     public record SubmitResult(boolean ok, String message, String submissionId) {}
+
+    public record SubmissionStatus(
+        String submissionId,
+        String packName,
+        String status,
+        String submittedAt,
+        String resolvedAt,
+        String catalogId,
+        String packUrl,
+        String denyReason,
+        List<String> tags
+    ) {}
 
     public static SubmitResult submit(byte[] zipBytes, String filename, SubmitRequest req) throws IOException {
         if (zipBytes == null || zipBytes.length == 0) {
@@ -92,6 +111,36 @@ public final class PackSubmitClient {
         return new SubmitResult(true, msg, id);
     }
 
+    public static List<SubmissionStatus> fetchSubmissions(String clientId) throws IOException {
+        if (clientId == null || clientId.isBlank()) return List.of();
+        String base = SlothyConfig.getWorkerBaseUrl();
+        if (base.isBlank()) return List.of();
+
+        String url = base + "/v1/submit-status?clientId="
+            + URLEncode(clientId);
+        HttpURLConnection conn = (HttpURLConnection) URI.create(url).toURL().openConnection();
+        conn.setConnectTimeout(CONNECT_MS);
+        conn.setReadTimeout(READ_MS);
+        conn.setRequestMethod("GET");
+        conn.setRequestProperty("User-Agent", "SlothyHub-Mod/1.0 (submit-status)");
+
+        int code = conn.getResponseCode();
+        InputStream stream = code >= 400 ? conn.getErrorStream() : conn.getInputStream();
+        String json = stream != null ? new String(stream.readAllBytes(), StandardCharsets.UTF_8) : "";
+        if (code != 200) {
+            throw new IOException(parseMessage(json, "Could not load upload status (HTTP " + code + ")."));
+        }
+
+        JsonObject obj = GSON.fromJson(json, JsonObject.class);
+        if (obj == null || !obj.has("submissions")) return List.of();
+        List<SubmissionStatus> list = GSON.fromJson(obj.get("submissions"), STATUS_LIST);
+        return list != null ? list : List.of();
+    }
+
+    private static String URLEncode(String s) {
+        return java.net.URLEncoder.encode(s, StandardCharsets.UTF_8);
+    }
+
     private static String parseMessage(String json, String fallback) {
         try {
             JsonObject obj = GSON.fromJson(json, JsonObject.class);
@@ -112,6 +161,7 @@ public final class PackSubmitClient {
         writeField(out, boundary, "contact", req.contact() != null ? req.contact() : "");
         writeField(out, boundary, "packId", req.packId() != null ? req.packId() : "");
         writeField(out, boundary, "clientId", req.clientId() != null ? req.clientId() : "");
+        writeField(out, boundary, "tags", tagsToField(req.tags()));
 
         String safeFile = filename != null && !filename.isBlank() ? filename : "pack.zip";
         out.write(("--" + boundary + crlf).getBytes(StandardCharsets.UTF_8));
@@ -122,6 +172,17 @@ public final class PackSubmitClient {
         out.write(crlf.getBytes(StandardCharsets.UTF_8));
         out.write(("--" + boundary + "--" + crlf).getBytes(StandardCharsets.UTF_8));
         return out.toByteArray();
+    }
+
+    private static String tagsToField(List<String> tags) {
+        if (tags == null || tags.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder();
+        for (String t : tags) {
+            if (t == null || t.isBlank()) continue;
+            if (sb.length() > 0) sb.append(',');
+            sb.append(t.trim().toLowerCase());
+        }
+        return sb.toString();
     }
 
     private static void writeField(ByteArrayOutputStream out, String boundary,
