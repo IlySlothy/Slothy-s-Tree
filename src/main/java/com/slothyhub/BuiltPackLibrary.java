@@ -39,14 +39,30 @@ public final class BuiltPackLibrary {
         Files.write(libraryDir().resolve(safeName + ".zip"), zipData);
         JsonObject manifest = readManifest();
         JsonArray packs = manifest.has("packs") ? manifest.getAsJsonArray("packs") : new JsonArray();
+        String id = "library:" + safeName;
+        JsonArray kept = new JsonArray();
+        for (var el : packs) {
+            JsonObject o = el.getAsJsonObject();
+            if (id.equals(o.get("id").getAsString())) continue;
+            kept.add(el);
+        }
         JsonObject entry = new JsonObject();
-        entry.addProperty("id", "library:" + safeName);
+        entry.addProperty("id", id);
         entry.addProperty("name", displayName);
         entry.addProperty("filename", safeName + ".zip");
         entry.addProperty("created", System.currentTimeMillis());
-        packs.add(entry);
-        manifest.add("packs", packs);
+        kept.add(entry);
+        manifest.add("packs", kept);
         Files.writeString(libraryDir().resolve(MANIFEST), GSON.toJson(manifest), StandardCharsets.UTF_8);
+    }
+
+    public static String safeNameFromPack(Pack pack) {
+        String fn = pack.getPackFilename();
+        if (fn != null && fn.toLowerCase(Locale.ROOT).endsWith(".zip"))
+            return fn.substring(0, fn.length() - 4);
+        String id = pack.getId();
+        if (id != null && id.startsWith("library:")) return id.substring("library:".length());
+        return sanitizeName(pack.getName());
     }
 
     public static List<Pack> listPacks() {

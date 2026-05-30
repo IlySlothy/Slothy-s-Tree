@@ -107,7 +107,7 @@ public final class ModernCitItemRenderer {
         }
         CitRenderCache.remember(renderState, stack, sprite, texId);
         applySpriteToLayers(renderState, sprite, texId);
-        SlothyHubMod.LOGGER.info("Modern CIT: matched {} for {} (names={})", rule.id, itemId, matchNames);
+        logMatchOnce(itemId, rule, matchNames);
     }
 
     public static void clearRenderCache(class_10444 renderState) {
@@ -295,8 +295,14 @@ public final class ModernCitItemRenderer {
         catch (Exception e) { return null; }
     }
 
-    private static long lastNearMissLogMs;
-    private static String lastNearMissKey = "";
+    // Match / near-miss diagnostics are silent by default - they fire on every rendered
+    // frame and can produce thousands of log lines per minute. Enable with
+    // -Dslothyhub.debug.cit=true when investigating issues.
+    private static final boolean CIT_DEBUG_LOG =
+        Boolean.parseBoolean(System.getProperty("slothyhub.debug.cit", "false"));
+    private static final java.util.Map<String, Long> LAST_MATCH_LOG_MS = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final java.util.Map<String, Long> LAST_NEAR_MISS_LOG_MS = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final long LOG_THROTTLE_MS = 8000L;
     private static boolean layersMissingLogged;
 
     private static void logLayersMissingOnce() {
@@ -306,13 +312,24 @@ public final class ModernCitItemRenderer {
             com.slothyhub.compat.McVersion.current());
     }
 
-    private static void logNearMiss(String itemId, List<String> names) {
-        if (!itemId.contains("netherite_sword")) return;
+    private static void logMatchOnce(String itemId, CitRule rule, List<String> names) {
+        if (!CIT_DEBUG_LOG) return;
+        String key = rule.id + "|" + itemId;
         long now = System.currentTimeMillis();
+        Long last = LAST_MATCH_LOG_MS.get(key);
+        if (last != null && now - last < LOG_THROTTLE_MS) return;
+        LAST_MATCH_LOG_MS.put(key, now);
+        SlothyHubMod.LOGGER.info("Modern CIT: matched {} for {} (names={})", rule.id, itemId, names);
+    }
+
+    private static void logNearMiss(String itemId, List<String> names) {
+        if (!CIT_DEBUG_LOG) return;
+        if (!itemId.contains("netherite_sword")) return;
         String key = itemId + "|" + String.join(",", names);
-        if (key.equals(lastNearMissKey) && now - lastNearMissLogMs < 8000) return;
-        lastNearMissKey = key;
-        lastNearMissLogMs = now;
+        long now = System.currentTimeMillis();
+        Long last = LAST_NEAR_MISS_LOG_MS.get(key);
+        if (last != null && now - last < LOG_THROTTLE_MS) return;
+        LAST_NEAR_MISS_LOG_MS.put(key, now);
         if (names == null || names.isEmpty()) {
             SlothyHubMod.LOGGER.info("Modern CIT: no rule matched {} (no display strings)", itemId);
         } else {

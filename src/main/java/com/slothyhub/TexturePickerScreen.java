@@ -2,6 +2,7 @@ package com.slothyhub;
 
 import com.slothyhub.cit.TextureAnimationUtil;
 import com.slothyhub.builder.ResourceScanHelper;
+import com.slothyhub.builder.BuilderPackState;
 import com.slothyhub.compat.DrawHelper;
 import com.slothyhub.compat.Identifiers;
 import com.slothyhub.compat.InputCompat;
@@ -60,6 +61,12 @@ public class TexturePickerScreen extends class_437 {
         }
     }
 
+    /** Hippo + Bubble share the same block-override texture pool in the picker. */
+    private static final String[] BLOCK_CORAL_TEXTURE_PATHS = {
+        "assets/minecraft/textures/block/dead_tube_coral.png",
+        "assets/minecraft/textures/block/bubble_coral.png",
+    };
+
     private static final SlotDef[] SLOTS = {
         new SlotDef("Noob Sword",    "netherite_sword", new String[]{"diamond_sword"}, "Noob Sword",    "noob_sword",    "⚔", false, null, new String[]{}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.SWORDS, TexFolder.ITEM, null),
         new SlotDef("Good Sword",    "netherite_sword", new String[]{"diamond_sword"}, "Good Sword",    "good_sword",    "⚔", false, null, new String[]{}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.SWORDS, TexFolder.ITEM, null),
@@ -67,7 +74,10 @@ public class TexturePickerScreen extends class_437 {
         new SlotDef("Perfect Sword", "netherite_sword", new String[]{"diamond_sword"}, "Perfect Sword", "perfect_sword", "⚔", false, null, new String[]{}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.SWORDS, TexFolder.ITEM, null),
         new SlotDef("Hippo Sword",   "dead_tube_coral", new String[]{}, null, "dead_tube_coral", "🦛", true,
             "assets/minecraft/textures/block/dead_tube_coral.png",
-            new String[]{"assets/minecraft/textures/block/dead_tube_coral.png"}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.SWORDS, TexFolder.BLOCK, null),
+            BLOCK_CORAL_TEXTURE_PATHS, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.SWORDS, TexFolder.BLOCK, null),
+        new SlotDef("Bubble Coral",  "bubble_coral", new String[]{}, null, "bubble_coral", "🫧", true,
+            "assets/minecraft/textures/block/bubble_coral.png",
+            BLOCK_CORAL_TEXTURE_PATHS, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.SWORDS, TexFolder.BLOCK, null),
         new SlotDef("Warden Sword",  "netherite_sword", new String[]{"diamond_sword"}, "Warden Sword",  "warden_sword",  "🌑", false, null, new String[]{}, new String[]{}, new String[]{}, ParticleKind.NONE, SlotCategory.SWORDS, TexFolder.ITEM, null),
         new SlotDef("Golden Crit",   "potion", new String[]{}, null, "golden_crit",   "✨", true, "assets/minecraft/textures/particle/golden_crit.png", new String[]{}, new String[]{"assets/minecraft/textures/particle/"}, new String[]{"golden_crit"}, ParticleKind.GOLDEN_CRIT, SlotCategory.PARTICLES, TexFolder.PARTICLES, null),
         new SlotDef("Critical Hit",  "potion", new String[]{}, null, "critical_hit",  "💥", true, "assets/minecraft/textures/particle/critical_hit.png", new String[]{}, new String[]{"assets/minecraft/textures/particle/"}, new String[]{"critical_hit"}, ParticleKind.CRITICAL_HIT, SlotCategory.PARTICLES, TexFolder.PARTICLES, null),
@@ -119,7 +129,6 @@ public class TexturePickerScreen extends class_437 {
     private static final int HEART_HALF_SLOT = slotIndexByOutput("heart_half");
     private static final int ABSORPTION_FULL_SLOT = slotIndexByOutput("heart_absorption_full");
     private static final int ABSORPTION_HALF_SLOT = slotIndexByOutput("heart_absorption_half");
-    private static final int HIPPO_SLOT = slotIndexByOutput("dead_tube_coral");
     private static final int NETHERITE_SWORD_SLOT = slotIndexByOutput("netherite_sword");
     private static final int[][] HEART_PAIRS = {
         { HEART_FULL_SLOT, HEART_HALF_SLOT },
@@ -276,9 +285,16 @@ public class TexturePickerScreen extends class_437 {
     private final class_437 parent;
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
+    /** Non-null when editing an existing library pack. */
+    private final String editingLibrarySafeName;
+    private byte[] editingZipBytes;
+    private BuilderPackState pendingRestoreState;
+
     private final Map<Integer, List<TextureOption>> discovered = new LinkedHashMap<>();
     private final Map<Integer, Integer> selections  = new LinkedHashMap<>();
     private final Map<Integer, String>  customNames = new HashMap<>();
+    /** Custom output PNG base name (no path/extension) for vanilla override slots. */
+    private final Map<Integer, String>  customOutputNames = new HashMap<>();
     private final Map<Integer, TexFolder> folders   = new HashMap<>();
 
     private String packName = "My Custom Pack";
@@ -297,6 +313,8 @@ public class TexturePickerScreen extends class_437 {
 
     private String citNameEdit = "";
     private boolean citNameFocused = false;
+    private String outputNameEdit = "";
+    private boolean outputNameFocused = false;
     private int citBarX, citBarY, citBarW, citBarH;
     private String packNameDraft = "My Custom Pack";
     private String searchQuery = "";
@@ -308,8 +326,18 @@ public class TexturePickerScreen extends class_437 {
     private final InputCompat.Poller inputPoller = new InputCompat.Poller();
 
     public TexturePickerScreen(class_437 parent) {
-        super(class_2561.method_43470("Texture Builder"));
+        this(parent, null);
+    }
+
+    /** Open the builder pre-loaded with an existing library pack for editing. */
+    public TexturePickerScreen(class_437 parent, Pack editPack) {
+        super(class_2561.method_43470(editPack != null ? "Customize Pack" : "Texture Builder"));
         this.parent = parent;
+        this.editingLibrarySafeName = editPack != null ? BuiltPackLibrary.safeNameFromPack(editPack) : null;
+        if (editPack != null) {
+            packName = editPack.getName();
+            packNameDraft = packName;
+        }
     }
 
     @Override
@@ -318,7 +346,8 @@ public class TexturePickerScreen extends class_437 {
         int bx = field_22789 / 2 - bw - gap / 2;
         int by = field_22790 - FOOTER + (FOOTER - bh) / 2;
         method_37063(new CustomButton(bx, by, bw, bh,
-            class_2561.method_43470("BUILD & APPLY"), CustomButtonBase.Style.MOSS, this::promptBuild));
+            class_2561.method_43470(editingLibrarySafeName != null ? "SAVE & APPLY" : "BUILD & APPLY"),
+            CustomButtonBase.Style.MOSS, this::promptBuild));
         method_37063(new CustomButton(bx + bw + gap, by, bw, bh,
             class_2561.method_43470("BACK"), CustomButtonBase.Style.SECONDARY, this::method_25419));
 
@@ -381,6 +410,42 @@ public class TexturePickerScreen extends class_437 {
         citNameFocused = false;
     }
 
+    private static boolean supportsOutputNameEdit(SlotDef slot) {
+        return slot.vanillaTexture() && slot.particleKind() != ParticleKind.GOLDEN_CRIT;
+    }
+
+    private String defaultOutputNameForSlot(int idx) {
+        String custom = customOutputNames.get(idx);
+        if (custom != null && !custom.isBlank()) return custom;
+        return SLOTS[idx].outputBaseName();
+    }
+
+    private void commitOutputNameEdit(int slotIdx) {
+        if (slotIdx < 0 || slotIdx >= SLOTS.length) return;
+        if (!supportsOutputNameEdit(SLOTS[slotIdx])) return;
+        String text = (outputNameFocused ? outputNameEdit : defaultOutputNameForSlot(slotIdx)).trim();
+        text = sanitizeOutputFileName(text);
+        String def = SLOTS[slotIdx].outputBaseName();
+        customOutputNames.put(slotIdx, text.isBlank() || text.equals(def) ? null : text);
+        outputNameFocused = false;
+    }
+
+    private static String sanitizeOutputFileName(String name) {
+        if (name == null) return "";
+        return name.trim().replaceAll("[^a-zA-Z0-9_\\-]", "_").toLowerCase(Locale.ROOT);
+    }
+
+    private String effectiveVanillaOutputPath(int idx) {
+        SlotDef slot = SLOTS[idx];
+        String path = slot.vanillaOutputPath();
+        String custom = customOutputNames.get(idx);
+        if (custom == null || custom.isBlank() || custom.equals(slot.outputBaseName())) return path;
+        String safe = sanitizeOutputFileName(custom);
+        if (safe.isBlank()) return path;
+        int slash = path.lastIndexOf('/');
+        return slash >= 0 ? path.substring(0, slash + 1) + safe + ".png" : safe + ".png";
+    }
+
     private TexFolder effectiveFolder(int idx) {
         return folders.getOrDefault(idx, SLOTS[idx].defaultFolder());
     }
@@ -398,6 +463,22 @@ public class TexturePickerScreen extends class_437 {
         Path rpDir = class_310.method_1551().field_1697.toPath().resolve("resourcepacks");
         Map<Integer, List<TextureOption>> result = new LinkedHashMap<>();
         for (int i = 0; i < SLOTS.length; i++) result.put(i, new ArrayList<>());
+
+        if (editingLibrarySafeName != null) {
+            try {
+                Path libZip = BuiltPackLibrary.libraryDir().resolve(editingLibrarySafeName + ".zip");
+                if (Files.exists(libZip)) {
+                    editingZipBytes = Files.readAllBytes(libZip);
+                    pendingRestoreState = BuilderPackState.loadFromZipBytes(editingZipBytes);
+                    if (pendingRestoreState != null && pendingRestoreState.packName() != null) {
+                        packName = pendingRestoreState.packName();
+                        packNameDraft = packName;
+                    }
+                }
+            } catch (Exception e) {
+                SlothyHubMod.LOGGER.warn("Could not load library pack for editing: {}", e.getMessage());
+            }
+        }
 
         // 1) Pull the web catalog first - it's the primary source. The fetch is async-loaded
         //    in WebTextureCatalog; if it hasn't completed yet we kick a refresh and wait briefly
@@ -471,6 +552,10 @@ public class TexturePickerScreen extends class_437 {
             discovered.clear();
             discovered.putAll(result);
             scanning = false;
+            if (pendingRestoreState != null) {
+                applyBuilderState(pendingRestoreState);
+                pendingRestoreState = null;
+            }
             if (finalTotalOpts == 0) {
                 scanStatus = finalPackCount == 0
                     ? "No packs found — add packs to resourcepacks/ or slothyhub-local/"
@@ -606,7 +691,9 @@ public class TexturePickerScreen extends class_437 {
             if (slot.soundOutputBase() != null) continue;
             if (!slot.vanillaTexture()) continue;
 
-            if (slot.exactPaths().length > 0) {
+            if (isBlockCoralOverrideSlot(slot)) {
+                if (!isBlockCoralOverrideAsset(lower)) continue;
+            } else if (slot.exactPaths().length > 0) {
                 boolean exact = false;
                 for (String ep : slot.exactPaths()) {
                     if (lower.equals(ep.toLowerCase(Locale.ROOT))) { exact = true; break; }
@@ -872,9 +959,17 @@ public class TexturePickerScreen extends class_437 {
         return slot.category() == SlotCategory.SWORDS && !slot.vanillaTexture();
     }
 
-    /** Hippo uses block override but shares the sword CIT texture picker pool. */
-    private static boolean isHippoSlot(SlotDef slot) {
-        return "dead_tube_coral".equals(slot.outputBaseName());
+    /** Hippo / Bubble use block overrides but share the sword CIT texture picker pool. */
+    private static boolean isBlockCoralOverrideSlot(SlotDef slot) {
+        return "dead_tube_coral".equals(slot.outputBaseName())
+            || "bubble_coral".equals(slot.outputBaseName());
+    }
+
+    private static boolean isBlockCoralOverrideAsset(String lowerPath) {
+        for (String p : BLOCK_CORAL_TEXTURE_PATHS) {
+            if (lowerPath.equals(p.toLowerCase(Locale.ROOT))) return true;
+        }
+        return false;
     }
 
     private static boolean isNetheriteVanillaSwordSlot(SlotDef slot) {
@@ -884,7 +979,7 @@ public class TexturePickerScreen extends class_437 {
     }
 
     private static boolean sharesSwordCitPool(SlotDef slot) {
-        return isSwordCitSlot(slot) || isHippoSlot(slot) || isNetheriteVanillaSwordSlot(slot);
+        return isSwordCitSlot(slot) || isBlockCoralOverrideSlot(slot) || isNetheriteVanillaSwordSlot(slot);
     }
 
     /** After scan, bidirectionally merge textures across all sword CIT pool slots. */
@@ -947,6 +1042,7 @@ public class TexturePickerScreen extends class_437 {
         }
         SlothyHubMod.LOGGER.info("WebTextureCatalog: added {} picker options from {} pack(s)",
             added, packs.size());
+        mergeSharedSwordPool(out);
     }
 
     private static boolean webTextureMatchesSlot(
@@ -958,6 +1054,7 @@ public class TexturePickerScreen extends class_437 {
         for (String ep : slot.exactPaths()) {
             if (lower.equals(ep.toLowerCase(Locale.ROOT))) return true;
         }
+        if (isBlockCoralOverrideSlot(slot) && isBlockCoralOverrideAsset(lower)) return true;
 
         if ("swords".equals(cat)) {
             if (!sharesSwordCitPool(slot)) return false;
@@ -965,6 +1062,9 @@ public class TexturePickerScreen extends class_437 {
         }
         if ("sounds".equals(cat)) {
             return matchesSoundSlot(slot, lower);
+        }
+        if ("items".equals(cat) && isBlockCoralOverrideSlot(slot) && isBlockCoralOverrideAsset(lower)) {
+            return true;
         }
         if (slot.soundOutputBase() != null || !slot.vanillaTexture()) return false;
         SlotCategory expected = switch (cat) {
@@ -1065,7 +1165,7 @@ public class TexturePickerScreen extends class_437 {
 
         for (int si = 0; si < SLOTS.length; si++) {
             SlotDef slot = SLOTS[si];
-            if ("dead_tube_coral".equals(slot.outputBaseName())) {
+            if (isBlockCoralOverrideSlot(slot)) {
                 if (!isSwordCitSource(propPath, texProp, items)) continue;
             } else if (slot.vanillaTexture()) {
                 continue;
@@ -1082,7 +1182,7 @@ public class TexturePickerScreen extends class_437 {
         }
     }
 
-    /** Any CIT sword texture (good, pro, warden, etc.) can fill any sword slot picker, including hippo. */
+    /** Any CIT sword texture (good, pro, warden, etc.) can fill any sword slot picker, including hippo and bubble. */
     private static boolean isSwordCitSource(String propPath, String texProp, Set<String> items) {
         if (items.contains("netherite_sword") || items.contains("minecraft:netherite_sword")) return true;
         if (items.contains("diamond_sword") || items.contains("minecraft:diamond_sword")) return true;
@@ -1194,11 +1294,13 @@ public class TexturePickerScreen extends class_437 {
 
     private void hideBackgroundFields() {
         commitCitNameEdit(selectedSlot);
+        commitOutputNameEdit(selectedSlot);
         searchFocused = false;
     }
 
     private void restoreBackgroundFields() {
         citNameFocused = false;
+        outputNameFocused = false;
     }
 
     private void closeNameDialog() {
@@ -1212,6 +1314,125 @@ public class TexturePickerScreen extends class_437 {
         buildAndApply();
     }
 
+    private static String textureKey(TextureOption opt) {
+        if (opt == null) return "";
+        if (opt.isWeb()) {
+            String id = opt.webPackId() != null ? opt.webPackId() : "";
+            return "web:" + id + "|" + opt.pngEntry();
+        }
+        String pack = opt.packPath() != null ? opt.packPath().toString() : "";
+        return "local:" + pack + "|" + opt.isZip() + "|" + opt.pngEntry();
+    }
+
+    private int findTextureIndex(int slotIdx, String key) {
+        if (key == null || key.isBlank()) return -1;
+        List<TextureOption> opts = discovered.getOrDefault(slotIdx, List.of());
+        for (int i = 0; i < opts.size(); i++) {
+            if (key.equals(textureKey(opts.get(i)))) return i;
+        }
+        int pipe = key.indexOf('|');
+        if (pipe >= 0 && pipe + 1 < key.length()) {
+            String entry = key.substring(pipe + 1).toLowerCase(Locale.ROOT);
+            for (int i = 0; i < opts.size(); i++) {
+                String oe = opts.get(i).pngEntry();
+                if (oe != null && oe.replace('\\', '/').toLowerCase(Locale.ROOT).equals(entry)) return i;
+            }
+        }
+        return -1;
+    }
+
+    private int findTextureByContent(int slotIdx, byte[] builtBytes) {
+        if (builtBytes == null || builtBytes.length == 0) return -1;
+        List<TextureOption> opts = discovered.getOrDefault(slotIdx, List.of());
+        for (int i = 0; i < opts.size(); i++) {
+            byte[] preview = opts.get(i).pngPreview();
+            if ((preview == null || preview.length == 0) && opts.get(i).pngEntry() != null) {
+                try { preview = readOptionBytes(opts.get(i), opts.get(i).pngEntry()); }
+                catch (Exception ignored) {}
+            }
+            if (preview != null && pngBytesMatch(preview, builtBytes)) return i;
+        }
+        return -1;
+    }
+
+    private static boolean pngBytesMatch(byte[] a, byte[] b) {
+        if (a == null || b == null) return false;
+        if (java.util.Arrays.equals(a, b)) return true;
+        if (Math.abs(a.length - b.length) <= 64) {
+            int min = Math.min(a.length, b.length);
+            int same = 0;
+            for (int i = 0; i < min; i++) if (a[i] == b[i]) same++;
+            return same > min * 0.95;
+        }
+        return false;
+    }
+
+    private String builtPathForSlot(int si) {
+        SlotDef slot = SLOTS[si];
+        if (slot.soundOutputBase() != null)
+            return "assets/minecraft/sounds/" + slot.soundOutputBase() + ".ogg";
+        if (slot.vanillaTexture()) return effectiveVanillaOutputPath(si);
+        TexFolder folder = effectiveFolder(si);
+        return folder.assetPath + slot.outputBaseName() + ".png";
+    }
+
+    private BuilderPackState captureBuilderState(String librarySafeName) {
+        List<BuilderPackState.SlotSelection> list = new ArrayList<>();
+        for (int si = 0; si < SLOTS.length; si++) {
+            Integer selIdx = selections.get(si);
+            if (selIdx == null || selIdx < 0) continue;
+            List<TextureOption> opts = discovered.getOrDefault(si, List.of());
+            if (selIdx >= opts.size()) continue;
+            SlotDef slot = SLOTS[si];
+            String outCustom = customOutputNames.get(si);
+            list.add(new BuilderPackState.SlotSelection(
+                slot.outputBaseName(),
+                textureKey(opts.get(selIdx)),
+                builtPathForSlot(si),
+                customNames.get(si),
+                outCustom != null && !outCustom.equals(slot.outputBaseName()) ? outCustom : null,
+                slot.vanillaTexture() || slot.soundOutputBase() != null ? null : effectiveFolder(si).name()
+            ));
+        }
+        return new BuilderPackState(packName, librarySafeName, list);
+    }
+
+    private void applyBuilderState(BuilderPackState state) {
+        Set<Integer> applied = new LinkedHashSet<>();
+        for (BuilderPackState.SlotSelection sel : state.selections()) {
+            int idx = slotIndexByOutput(sel.outputBaseName());
+            if (idx < 0 || applied.contains(idx)) continue;
+
+            int texIdx = findTextureIndex(idx, sel.textureKey());
+            if (texIdx < 0 && sel.builtPath() != null && editingZipBytes != null) {
+                try {
+                    byte[] built = BuilderPackState.readZipEntry(editingZipBytes, sel.builtPath());
+                    if (built != null) texIdx = findTextureByContent(idx, built);
+                } catch (Exception ignored) {}
+            }
+            if (texIdx >= 0) {
+                selections.put(idx, texIdx);
+                applied.add(idx);
+            }
+            if (sel.citName() != null && !sel.citName().isBlank())
+                customNames.put(idx, sel.citName());
+            if (sel.outputName() != null && !sel.outputName().isBlank())
+                customOutputNames.put(idx, sel.outputName());
+            if (sel.folder() != null) {
+                try { folders.put(idx, TexFolder.valueOf(sel.folder())); }
+                catch (IllegalArgumentException ignored) {}
+            }
+        }
+        long restored = selections.values().stream().filter(v -> v != null && v >= 0).count();
+        if (restored > 0) {
+            buildStatus = "Restored " + restored + " choice(s) — edit and save when ready.";
+            buildOk = true;
+        } else if (editingLibrarySafeName != null) {
+            buildStatus = "Re-pick textures for this pack, then save.";
+            buildOk = false;
+        }
+    }
+
     private void buildAndApply() {
         if (scanning) return;
         long chosen = selections.values().stream().filter(v -> v != null && v >= 0).count();
@@ -1221,12 +1442,12 @@ public class TexturePickerScreen extends class_437 {
         commitCitNameEdit(selectedSlot);
         executor.submit(() -> {
             try {
-                byte[] zipBytes = buildPack();
-                String safe = BuiltPackLibrary.sanitizeName(packName);
-                final String libName = safe;
-                PackDownloader.applyBuiltPack(zipBytes, packName);
+                String safe = editingLibrarySafeName != null
+                    ? editingLibrarySafeName : BuiltPackLibrary.sanitizeName(packName);
+                byte[] zipBytes = buildPack(safe);
+                PackDownloader.applyBuiltPack(zipBytes, packName, safe);
                 class_310.method_1551().execute(() -> {
-                    buildStatus = "Saved to resourcepacks/" + libName + ".zip + library";
+                    buildStatus = "Saved to resourcepacks/" + safe + ".zip + library";
                     buildOk = true;
                     KillEffectAssets.invalidate();
                 });
@@ -1239,7 +1460,7 @@ public class TexturePickerScreen extends class_437 {
         });
     }
 
-    private byte[] buildPack() throws Exception {
+    private byte[] buildPack(String librarySafeName) throws Exception {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         try (ZipOutputStream zos = new ZipOutputStream(baos)) {
             putEntry(zos, "pack.mcmeta",
@@ -1265,7 +1486,7 @@ public class TexturePickerScreen extends class_437 {
                     if (slot.particleKind() == ParticleKind.GOLDEN_CRIT) {
                         writeGoldenCritBundle(zos, opt, png);
                     } else {
-                        String outPath = slot.vanillaOutputPath();
+                        String outPath = effectiveVanillaOutputPath(si);
                         putEntry(zos, outPath, png);
                         copyMcmetaIfPresent(zos, opt, outPath);
                         if (slot.category() == SlotCategory.KILL_FX && outPath.contains("totem_of_undying")) {
@@ -1278,6 +1499,7 @@ public class TexturePickerScreen extends class_437 {
                     writeCitBundle(zos, slot, opt, png, si);
                 }
             }
+            captureBuilderState(librarySafeName).writeToZip(zos);
         }
         return baos.toByteArray();
     }
@@ -1604,7 +1826,8 @@ public class TexturePickerScreen extends class_437 {
         ctx.method_25294(0, HEADER - 1, field_22789, HEADER, Ui.COL_BORDER);
 
         DrawHelper.drawText(ctx, field_22793, "←", PAD + 22, (HEADER - 9) / 2, Ui.COL_MUTED, false);
-        DrawHelper.drawText(ctx, field_22793, "TEXTURE BUILDER",
+        String title = editingLibrarySafeName != null ? "CUSTOMIZE PACK" : "TEXTURE BUILDER";
+        DrawHelper.drawText(ctx, field_22793, title,
             PAD + 34, (HEADER - 9) / 2, Ui.COL_ACCENT, false);
         Ui.drawSlothLogo(ctx, PAD, (HEADER - 16) / 2, phase);
         DrawHelper.flushDraw(ctx);
@@ -1687,17 +1910,23 @@ public class TexturePickerScreen extends class_437 {
             LEFT_W + PAD, top + 6, Ui.COL_TEXT, false);
 
         if (slot.vanillaTexture()) {
+            if (supportsOutputNameEdit(slot)) {
+                DrawHelper.drawText(ctx, field_22793, "PNG name",
+                    LEFT_W + PAD, top + 26, Ui.COL_MUTED, false);
+                drawOutputNameBar(ctx);
+            }
             String hint = switch (slot.particleKind()) {
                 case GOLDEN_CRIT -> "Either Golden Crit or Critical Hit — includes .mcmeta + particles/crit.json";
                 case CRITICAL_HIT -> "Either Golden Crit or Critical Hit — from textures/particle/";
                 case ENCHANT_HIT -> "Optional — from textures/particle/ in your packs.";
-                default -> isHippoSlot(slot)
-                    ? "Pick any sword CIT texture — outputs textures/block/dead_tube_coral.png."
+                default -> isBlockCoralOverrideSlot(slot)
+                    ? "Pick any sword CIT texture — outputs textures/block/" + defaultOutputNameForSlot(selectedSlot) + ".png."
                     : isNetheriteVanillaSwordSlot(slot)
-                    ? "Pick any sword CIT texture — outputs textures/item/netherite_sword.png."
+                    ? "Pick any sword CIT texture — outputs textures/item/" + defaultOutputNameForSlot(selectedSlot) + ".png."
                     : "From textures/ folder in your packs.";
             };
-            DrawHelper.drawText(ctx, field_22793, hint, LEFT_W + PAD, top + 26, Ui.COL_MUTED, false);
+            int hintY = supportsOutputNameEdit(slot) ? top + 42 : top + 26;
+            DrawHelper.drawText(ctx, field_22793, hint, LEFT_W + PAD, hintY, Ui.COL_MUTED, false);
         } else {
             DrawHelper.drawText(ctx, field_22793, "CIT Name",
                 LEFT_W + PAD, top + 26, Ui.COL_MUTED, false);
@@ -1725,6 +1954,44 @@ public class TexturePickerScreen extends class_437 {
         citBarY = configTop() + 22;
         citBarW = Math.min(220, field_22789 - citBarX - PAD);
         citBarH = 14;
+    }
+
+    private void layoutOutputNameBar() {
+        citBarX = layoutOutputNameBarX();
+        citBarY = layoutOutputNameBarY();
+        citBarW = layoutOutputNameBarW();
+        citBarH = layoutOutputNameBarH();
+    }
+
+    private int layoutOutputNameBarX() { return LEFT_W + PAD + field_22793.method_1727("PNG name  ") + 2; }
+    private int layoutOutputNameBarY() { return configTop() + 22; }
+    private int layoutOutputNameBarW() { return Math.min(220, field_22789 - layoutOutputNameBarX() - PAD); }
+    private int layoutOutputNameBarH() { return 14; }
+
+    private void drawOutputNameBar(class_332 ctx) {
+        if (nameDialogOpen || !supportsOutputNameEdit(SLOTS[selectedSlot])) return;
+        layoutOutputNameBar();
+        int sx = citBarX, sy = citBarY, sw = citBarW, sh = citBarH;
+        ctx.method_25294(sx, sy, sx + sw, sy + sh, col(Ui.COL_SURFACE & 0xFFFFFF, 200));
+        int lineCol = outputNameFocused ? Ui.COL_ACCENT : Ui.COL_BORDER;
+        ctx.method_25294(sx, sy, sx + sw, sy + 1, lineCol);
+        ctx.method_25294(sx, sy + sh - 1, sx + sw, sy + sh, lineCol);
+        ctx.method_25294(sx, sy, sx + 1, sy + sh, lineCol);
+        ctx.method_25294(sx + sw - 1, sy, sx + sw, sy + sh, lineCol);
+        if (outputNameFocused) {
+            ctx.method_25294(sx, sy + sh, sx + sw, sy + sh + 1, Ui.COL_ACCENT);
+        }
+
+        int textX = sx + 6, textY = sy + (sh - 8) / 2;
+        String display = outputNameFocused ? outputNameEdit : defaultOutputNameForSlot(selectedSlot);
+        if (display.isEmpty() && !outputNameFocused) {
+            DrawHelper.drawText(ctx, field_22793, "e.g. bubble_coral", textX, textY,
+                col(Ui.COL_MUTED & 0xFFFFFF, 140), false);
+        } else {
+            String shown = display;
+            if (outputNameFocused && (System.currentTimeMillis() / 500) % 2 == 0) shown += "_";
+            DrawHelper.drawText(ctx, field_22793, shown, textX, textY, Ui.COL_TEXT, false);
+        }
     }
 
     private void drawCitNameBar(class_332 ctx) {
@@ -1969,22 +2236,34 @@ public class TexturePickerScreen extends class_437 {
         }
 
         layoutSearchBar();
+        if (supportsOutputNameEdit(SLOTS[selectedSlot]) && !nameDialogOpen
+            && mx >= (layoutOutputNameBarX()) && mx <= layoutOutputNameBarX() + layoutOutputNameBarW()
+            && my >= layoutOutputNameBarY() && my <= layoutOutputNameBarY() + layoutOutputNameBarH()) {
+            outputNameEdit = defaultOutputNameForSlot(selectedSlot);
+            outputNameFocused = true;
+            citNameFocused = false;
+            searchFocused = false;
+            return true;
+        }
         layoutCitBar();
         if (!SLOTS[selectedSlot].vanillaTexture() && !nameDialogOpen
             && mx >= citBarX && mx <= citBarX + citBarW
             && my >= citBarY && my <= citBarY + citBarH) {
             citNameEdit = defaultNameForSlot(selectedSlot);
             citNameFocused = true;
+            outputNameFocused = false;
             searchFocused = false;
             return true;
         }
         if (mx >= searchBarX && mx <= searchBarX + searchBarW
             && my >= searchBarY && my <= searchBarY + searchBarH) {
             commitCitNameEdit(selectedSlot);
+            commitOutputNameEdit(selectedSlot);
             searchFocused = true;
             return true;
         }
         if (citNameFocused) commitCitNameEdit(selectedSlot);
+        if (outputNameFocused) commitOutputNameEdit(selectedSlot);
         searchFocused = false;
 
         if (handleCategoryTabClick(mx, my)) return true;
@@ -1996,7 +2275,10 @@ public class TexturePickerScreen extends class_437 {
             int y = top + 18 - (int) itemScroll;
             for (int i : visibleSlotIndices()) {
                 if (my >= y && my < y + ITEM_H) {
-                    if (i != selectedSlot) commitCitNameEdit(selectedSlot);
+                    if (i != selectedSlot) {
+                        commitCitNameEdit(selectedSlot);
+                        commitOutputNameEdit(selectedSlot);
+                    }
                     selectedSlot = i;
                     texScroll = texScrollTarget = 0;
                     searchQuery = "";
@@ -2079,6 +2361,10 @@ public class TexturePickerScreen extends class_437 {
             citNameEdit += chr;
             return true;
         }
+        if (outputNameFocused && chr >= 32 && chr != 127 && outputNameEdit.length() < 40) {
+            outputNameEdit += chr;
+            return true;
+        }
         if (searchFocused && chr >= 32 && chr != 127 && searchQuery.length() < 60) {
             searchQuery += chr;
             texScroll = texScrollTarget = 0;
@@ -2097,6 +2383,16 @@ public class TexturePickerScreen extends class_437 {
                 return true;
             }
             return true;
+        }
+        if (outputNameFocused) {
+            if (key == 259 && !outputNameEdit.isEmpty()) {
+                outputNameEdit = outputNameEdit.substring(0, outputNameEdit.length() - 1);
+                return true;
+            }
+            if (key == 256 || key == 257) {
+                commitOutputNameEdit(selectedSlot);
+                return true;
+            }
         }
         if (citNameFocused) {
             if (key == 259 && !citNameEdit.isEmpty()) {

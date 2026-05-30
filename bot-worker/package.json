@@ -1,0 +1,17 @@
+{
+  "name": "slothys-tree-bot-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cloudflare Worker version of the Slothy's Tree Discord bot (HTTP Interactions).",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "register": "node scripts/register-commands.mjs",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "wrangler": "^3.86.0"
+  }
+}

@@ -4,6 +4,7 @@ import com.slothyhub.SlothyHubMod;
 import com.slothyhub.cit.CitRule;
 import com.slothyhub.cit.CitRuleSet;
 import com.slothyhub.cit.CitVirtualTextures;
+import com.slothyhub.cit.TextureAnimationUtil;
 import com.slothyhub.compat.DrawHelper;
 import net.minecraft.class_1011;
 import net.minecraft.class_1043;
@@ -42,8 +43,13 @@ public final class ModernCitVirtualTextures {
                 continue;
             }
             final InputStream stream = in;
+            final class_2960 pngId = resourceId;
             try (stream) {
-                class_1011 img = class_1011.method_4309(stream);
+                class_1011 raw = class_1011.method_4309(stream);
+                // Crop animated CIT strips (Summer Perfect Sword etc.) to frame 0 so MC doesn't
+                // stretch the whole vertical strip onto the 16x16 item quad.
+                class_1011 img = TextureAnimationUtil.firstFrame(raw, manager, pngId);
+                if (img == null) img = raw;
                 String key = rule.id.toLowerCase().replaceAll("[^a-z0-9_\\-]", "_");
                 class_2960 texId = class_2960.method_60655("slothyhub", "cit/" + key + "_" + (seq++));
                 class_1043 tex = DrawHelper.createNativeTexture("slothyhub_cit_" + key, img);

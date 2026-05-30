@@ -15,16 +15,35 @@ import java.nio.charset.StandardCharsets;
 /** Parses .png.mcmeta animation metadata and crops animated strips to a single frame. */
 public final class TextureAnimationUtil {
 
-    record FrameInfo(int frameWidth, int frameHeight, int frameCount) {}
+    public record FrameInfo(int frameWidth, int frameHeight, int frameCount) {}
 
     private static final Method SET_PIXEL = resolveSetPixel();
+    private static final Method GET_PIXEL = resolveGetPixel();
 
     private TextureAnimationUtil() {}
 
     private static Method resolveSetPixel() {
-        for (String name : new String[]{"method_4305", "setColor", "setPixelAbgr"}) {
+        for (String name : new String[]{"method_4305", "setColor", "setPixelAbgr", "method_61941"}) {
             try {
                 Method m = class_1011.class.getDeclaredMethod(name, int.class, int.class, int.class);
+                m.setAccessible(true);
+                return m;
+            } catch (ReflectiveOperationException ignored) {
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Resolves the {@code NativeImage} pixel-read method. The intermediary name has
+     * shifted across MC versions ({@code method_4315} on legacy through 1.21.1-ish,
+     * {@code method_61940} on newer 1.21.x). Falls back to {@code null} when no
+     * compatible overload exists; callers must treat that as "skip the crop".
+     */
+    private static Method resolveGetPixel() {
+        for (String name : new String[]{"method_61940", "method_4315", "getColor", "getPixelColor"}) {
+            try {
+                Method m = class_1011.class.getDeclaredMethod(name, int.class, int.class);
                 m.setAccessible(true);
                 return m;
             } catch (ReflectiveOperationException ignored) {
@@ -39,6 +58,16 @@ public final class TextureAnimationUtil {
             SET_PIXEL.invoke(img, x, y, color);
         } catch (ReflectiveOperationException e) {
             SlothyHubMod.LOGGER.debug("CIT: setPixel failed: {}", e.getMessage());
+        }
+    }
+
+    private static int getPixel(class_1011 img, int x, int y) {
+        if (GET_PIXEL == null) return 0;
+        try {
+            return (int) GET_PIXEL.invoke(img, x, y);
+        } catch (ReflectiveOperationException e) {
+            SlothyHubMod.LOGGER.debug("CIT: getPixel failed: {}", e.getMessage());
+            return 0;
         }
     }
 
@@ -73,31 +102,45 @@ public final class TextureAnimationUtil {
         return parseMcmeta(mcmeta, w, h);
     }
 
-    static FrameInfo parseMcmeta(byte[] mcmeta, int w, int h) {
+    public static FrameInfo parseMcmeta(byte[] mcmeta, int w, int h) {
         int frameW = w;
         int frameH = h;
         int frameCount = 1;
+        boolean hasAnimation = false;
+        boolean explicitW = false;
+        boolean explicitH = false;
         if (mcmeta != null && mcmeta.length > 0) {
             try {
                 JsonObject root = JsonParser.parseString(new String(mcmeta, StandardCharsets.UTF_8)).getAsJsonObject();
                 if (root.has("animation")) {
+                    hasAnimation = true;
                     JsonObject anim = root.getAsJsonObject("animation");
-                    if (anim.has("width")) frameW = anim.get("width").getAsInt();
-                    if (anim.has("height")) frameH = anim.get("height").getAsInt();
+                    if (anim.has("width"))  { frameW = anim.get("width").getAsInt();  explicitW = true; }
+                    if (anim.has("height")) { frameH = anim.get("height").getAsInt(); explicitH = true; }
                     if (anim.has("frames") && anim.get("frames").isJsonArray()) {
                         frameCount = anim.getAsJsonArray("frames").size();
-                    } else if (frameH > 0 && h > frameH) {
-                        frameCount = h / frameH;
-                    } else if (frameW > 0 && w > frameW && h == frameH) {
-                        frameCount = w / frameW;
-                        frameW = w / Math.max(1, frameCount);
                     }
                 }
             } catch (Exception e) {
                 SlothyHubMod.LOGGER.debug("CIT: mcmeta parse failed: {}", e.getMessage());
             }
         }
-        if (frameCount <= 1 && h > w && w > 0 && h % w == 0) {
+        // When MC's animation block is present but the frame size wasn't given explicitly,
+        // vanilla derives it from the strip layout: a 16x96 PNG with a frames array still
+        // means 6 stacked 16x16 frames (the array can repeat / reorder indices).
+        // Without this, "frames":[0,0,1,2,3,4,5,...]" left frameH==96 and we ended up
+        // cropping the whole strip - exactly the Perfect Sword regression.
+        if (hasAnimation) {
+            if (!explicitW && !explicitH) {
+                if (h >= w) { frameW = w; frameH = w; }
+                else        { frameW = h; frameH = h; }
+            } else if (!explicitW) {
+                frameW = w;
+            } else if (!explicitH) {
+                frameH = h;
+            }
+        } else if (frameCount <= 1 && h > w && w > 0 && h % w == 0) {
+            // No mcmeta at all but the PNG is a vertical strip of square frames.
             frameW = w;
             frameH = w;
             frameCount = h / w;
@@ -136,10 +179,13 @@ public final class TextureAnimationUtil {
         w = Math.min(w, src.method_4307() - x);
         h = Math.min(h, src.method_4323() - y);
         if (w <= 0 || h <= 0) return src;
+        // If either NativeImage pixel accessor is missing for this MC version, bail
+        // out instead of crashing (older MC builds without the modern read/write API).
+        if (GET_PIXEL == null || SET_PIXEL == null) return src;
         class_1011 out = new class_1011(w, h, false);
         for (int row = 0; row < h; row++) {
             for (int col = 0; col < w; col++) {
-                setPixel(out, col, row, src.method_61940(x + col, y + row));
+                setPixel(out, col, row, getPixel(src, x + col, y + row));
             }
         }
         return out;

@@ -180,10 +180,15 @@ public class PackDownloader {
     }
 
     public static String applyBuiltPack(byte[] zipData, String packName) throws IOException {
+        return applyBuiltPack(zipData, packName, BuiltPackLibrary.sanitizeName(packName));
+    }
+
+    public static String applyBuiltPack(byte[] zipData, String packName, String librarySafeName) throws IOException {
         class_310 mc = class_310.method_1551();
         Path resourcePacksDir = mc.field_1697.toPath().resolve("resourcepacks");
         Files.createDirectories(resourcePacksDir);
-        String safeBase = BuiltPackLibrary.sanitizeName(packName);
+        String safeBase = librarySafeName != null && !librarySafeName.isBlank()
+            ? librarySafeName : BuiltPackLibrary.sanitizeName(packName);
         String zipName = safeBase + ".zip";
         Path zipPath = resourcePacksDir.resolve(zipName);
         Files.write(zipPath, zipData);

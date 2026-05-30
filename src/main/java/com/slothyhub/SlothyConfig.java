@@ -24,6 +24,8 @@ public class SlothyConfig {
     private static String urlOverride = "";
     private static String serverUrl = "";
     private static String voterId = "";
+    /** Cloudflare Worker URL for the SlothyHub Discord bot. Empty = heartbeat disabled. */
+    private static String heartbeatUrl = "";
     private static boolean batchedReload = true;
     private static boolean prefetchThumbnails = true;
     private static boolean animationsEnabled = true;
@@ -86,6 +88,15 @@ public class SlothyConfig {
 
     public static void regenerateVoterId() {
         voterId = UUID.randomUUID().toString();
+        save();
+    }
+
+    public static String getHeartbeatUrl() {
+        return heartbeatUrl == null ? "" : heartbeatUrl;
+    }
+
+    public static void setHeartbeatUrl(String url) {
+        heartbeatUrl = url == null ? "" : url.trim().replaceAll("/+$", "");
         save();
     }
 
@@ -199,6 +210,7 @@ public class SlothyConfig {
                 if (obj.has("serverUrl"))              serverUrl              = obj.get("serverUrl").getAsString();
                 if (obj.has("urlOverride"))            urlOverride            = obj.get("urlOverride").getAsString();
                 if (obj.has("voterId"))                voterId                = obj.get("voterId").getAsString();
+                if (obj.has("heartbeatUrl"))           heartbeatUrl           = obj.get("heartbeatUrl").getAsString();
                 if (obj.has("batchedReload"))          batchedReload          = obj.get("batchedReload").getAsBoolean();
                 if (obj.has("prefetchThumbnails"))     prefetchThumbnails     = obj.get("prefetchThumbnails").getAsBoolean();
                 if (obj.has("animationsEnabled"))      animationsEnabled      = obj.get("animationsEnabled").getAsBoolean();
@@ -239,6 +251,7 @@ public class SlothyConfig {
         obj.addProperty("serverUrl",              serverUrl == null ? "" : serverUrl);
         obj.addProperty("urlOverride",            urlOverride == null ? "" : urlOverride);
         obj.addProperty("voterId",                voterId == null ? "" : voterId);
+        obj.addProperty("heartbeatUrl",           heartbeatUrl == null ? "" : heartbeatUrl);
         obj.addProperty("batchedReload",          batchedReload);
         obj.addProperty("prefetchThumbnails",     prefetchThumbnails);
         obj.addProperty("animationsEnabled",      animationsEnabled);

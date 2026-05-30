@@ -50,8 +50,15 @@ public final class CitVirtualTextures {
                 continue;
             }
             final InputStream stream = in;
+            final class_2960 pngId = resourceId;
             try (stream) {
-                class_1011 img = class_1011.method_4309(stream);
+                class_1011 raw = class_1011.method_4309(stream);
+                // Animated CIT textures (e.g. Summer's Perfect Sword) ship a tall vertical strip
+                // plus a sibling .mcmeta. If we register the raw strip as a sprite, MC stretches
+                // the whole strip onto the 16x16 item quad - hence the giant Warden Sword we see.
+                // Crop to frame 0 here so the held-item / GUI render is the correct sword.
+                class_1011 img = TextureAnimationUtil.firstFrame(raw, manager, pngId);
+                if (img == null) img = raw;
                 String key = sanitize(rule.id);
                 class_2960 texId = class_2960.method_60655("slothyhub", "cit/" + key + "_" + (seq++));
                 class_1043 tex = DrawHelper.createNativeTexture("slothyhub_cit_" + key, img);

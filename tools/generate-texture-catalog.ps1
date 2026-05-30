@@ -34,6 +34,7 @@ function Get-PrettyLabel([string]$key) {
   $map = @{
     'noob_sword'='Noob Sword'; 'good_sword'='Good Sword'; 'pro_sword'='Pro Sword'
     'perfect_sword'='Perfect Sword'; 'warden_sword'='Warden Sword'
+    'dead_tube_coral'='Hippo Sword'; 'bubble_coral'='Bubble Coral'
   }
   if ($map.ContainsKey($key)) { return $map[$key] }
   return (($key -split '_') | ForEach-Object {
@@ -78,6 +79,7 @@ function Match-PickerPng([string]$asset) {
     return $null
   }
   if ($lower -eq 'assets/minecraft/textures/block/dead_tube_coral.png') { return 'items' }
+  if ($lower -eq 'assets/minecraft/textures/block/bubble_coral.png') { return 'items' }
   if ($lower -match '/item/|/block/') {
     $file = [System.IO.Path]::GetFileNameWithoutExtension($lower)
     if ($lower -match 'firework_rocket' -or $file -eq 'firework_rocket') { return 'items' }

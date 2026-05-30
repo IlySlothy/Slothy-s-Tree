@@ -21,13 +21,16 @@ jobs:
           generate_release_notes: true
           files: |
             release-assets/slothyhub-1.0.3-mc1.21.11.jar
+            release-assets/slothyhub-cit-1.0.3-mc1.21.11.jar
           body: |
-            ## Minecraft 1.21.11 (Fabric)
+            ## Minecraft 1.21.9 – 1.21.11 (Fabric)
 
-            Install into your Feather mods folder:
-            `.feather/user-mods/1.21.11-fabric/`
+            Install both jars into your mods folder:
 
-            - `slothyhub-1.0.3-mc1.21.11.jar` — main hub (pack browser, builder, themes)
+            - `slothyhub-1.0.3-mc1.21.11.jar` — main hub (pack browser, builder, themes, pack library)
+            - `slothyhub-cit-1.0.3-mc1.21.11.jar` — CIT companion (required on 1.21.9+)
+
+            Feather path example: `.feather/user-mods/1.21.11-fabric/`
 
             ### Requirements
             - Fabric Loader 0.19+
@@ -36,7 +39,7 @@ jobs:
 
             ### Notes
             - Do **not** install the 1.21.8 jar on 1.21.11
-            - CIT companion jar is temporarily withheld on 1.21.11 while it is being fixed
+            - CIT is **not** in the main jar on 1.21.9+ — install the CIT companion
 
       - name: Create GitHub Release (1.21.8)
         if: github.ref == 'refs/tags/v1.0.3-mc1.21.8'
@@ -57,23 +60,38 @@ jobs:
 
             CIT is included in the main jar on 1.21.8.
 
-      - name: Create GitHub Release (1.20–1.21.8)
-        if: github.ref == 'refs/tags/v1.0.2-mc1.20-1.21.8'
+      - name: Create GitHub Release (Legacy 1.20–1.21.1)
+        if: github.ref == 'refs/tags/v1.0.3-mc1.20-1.21.1'
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
-          files: release-assets/slothyhub-1.0.2-mc1.20-1.21.8.jar
+          files: |
+            release-assets/slothyhub-1.0.3-mc1.20-1.21.1.jar
+            release-assets/slothyhub-legacy-cit-1.0.3-mc1.21.8-legacy.jar
           body: |
-            ## Minecraft 1.20 – 1.21.8 (Fabric)
+            ## Minecraft 1.20 – 1.21.1 (Fabric, Legacy)
 
-            Download `slothyhub-1.0.2-mc1.20-1.21.8.jar` and drop it into your Fabric mods folder.
+            Download both jars and drop them into your Fabric mods folder:
 
-            CIT is included in the main jar on 1.21.8. For older versions in this range, also install `slothyhub-legacy-cit`.
+            - `slothyhub-1.0.3-mc1.20-1.21.1.jar` — main hub
+            - `slothyhub-legacy-cit-1.0.3-mc1.21.8-legacy.jar` — CIT companion for MC 1.20–1.21.7
+
+            On **1.21.8**, use the dedicated 1.21.8 release instead (`v1.0.3-mc1.21.8`).
+
+            ### Requirements
+            - Fabric Loader 0.14+
+            - Fabric API (matching your MC version)
+            - Java 17 or 21
+
+            ### CIT behaviour
+            - The bundled CIT engine **automatically yields to CIT Resewn / Chime / other CIT-providing mods** when one is present in your mods folder.
+            - On MC 1.20–1.21.7, install the legacy CIT companion jar above.
 
       - name: Create GitHub Release (fallback)
-        if: github.ref != 'refs/tags/v1.0.3-mc1.21.11' && github.ref != 'refs/tags/v1.0.3-mc1.21.8' && github.ref != 'refs/tags/v1.0.2-mc1.20-1.21.8'
+        if: github.ref != 'refs/tags/v1.0.3-mc1.21.11' && github.ref != 'refs/tags/v1.0.3-mc1.21.8' && github.ref != 'refs/tags/v1.0.3-mc1.20-1.21.1'
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           files: |
             release-assets/slothyhub-1.0.3-mc1.21.11.jar
+            release-assets/slothyhub-cit-1.0.3-mc1.21.11.jar

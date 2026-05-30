@@ -29,13 +29,25 @@ public final class CitEngine {
             SlothyHubMod.LOGGER.info("CIT engine disabled via config.");
             return;
         }
+        // External CIT mod check runs FIRST so we yield on every MC version we ship.
+        // This is the contract relied on by the slothyhub-1.20-1.21.1 legacy jar:
+        // if the user has CIT Resewn (or any other CIT-providing mod) installed, our
+        // engine never tries to register a parallel handler, even on the older MC
+        // builds where running two CIT pipelines would crash.
+        String externalCit = detectExternalCitMod();
+        if (externalCit != null) {
+            SlothyHubMod.LOGGER.info(
+                "CIT engine skipped: '{}' is installed and will handle CIT rules. "
+                + "Slothy's Tree will not register a second handler.", externalCit);
+            return;
+        }
         // The 1.21.8-targeted jar uses GpuTexture APIs that don't exist on <1.21.4.
         // If somebody force-installs it on an older MC, refuse to register the engine
         // instead of crashing later inside the sprite rebuild.
         if (!McVersion.atLeast("1.21.4")) {
             SlothyHubMod.LOGGER.warn(
                 "CIT engine skipped: this build targets MC 1.21.4+ (current = {}). "
-                + "Use the slothyhub-1.0.2-mc1.20-1.21.8 jar on older versions.",
+                + "Use the slothyhub-1.0.3-mc1.20-1.21.1 jar on older versions.",
                 McVersion.current());
             return;
         }
@@ -43,13 +55,6 @@ public final class CitEngine {
             SlothyHubMod.LOGGER.info(
                 "CIT: install slothyhub-cit alongside Slothy's Tree for MC {} (main jar has no CIT on 1.21.9+)",
                 McVersion.current());
-            return;
-        }
-        String externalCit = detectExternalCitMod();
-        if (externalCit != null) {
-            SlothyHubMod.LOGGER.info(
-                "CIT engine skipped: '{}' is installed and will handle CIT rules. "
-                + "Slothy's Tree will not register a second handler.", externalCit);
             return;
         }
         try {

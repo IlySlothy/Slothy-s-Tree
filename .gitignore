@@ -45,3 +45,7 @@ slothyhub-1.21.11/build/
 slothyhub-1.21.11/.gradle/
 legacy-cit/build/
 legacy-cit/.gradle/
+
+# Modrinth + other secrets
+.gradle/secrets/
+

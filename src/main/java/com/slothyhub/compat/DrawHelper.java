@@ -49,6 +49,53 @@ public final class DrawHelper {
    private static final Method LEGACY_BLIT_SPRITE = resolveBlitSpriteMethod(true);
    private static final Method MODERN_BLIT_SPRITE = resolveBlitSpriteMethod(false);
    private static final Method ENTITY_CUTOUT_LAYER = findGuiTexturedRenderLayerMethod();
+   /** MC 1.20-1.21.3: vanilla {@code DrawContext.drawTexture(Identifier, ...)} overloads where Identifier is the first arg. */
+   private static final Method PRE_V4_DRAW_TEX_9 = resolvePreV4DrawTexture(9);
+   private static final Method PRE_V4_DRAW_TEX_7 = resolvePreV4DrawTexture(7);
+   private static final java.util.concurrent.atomic.AtomicBoolean DIAG_LOGGED = new java.util.concurrent.atomic.AtomicBoolean(false);
+   private static final java.util.concurrent.atomic.AtomicInteger DRAW_PATH_LOG_COUNT = new java.util.concurrent.atomic.AtomicInteger(0);
+   /** Opt-in per-draw path tracing. Default off (silent) — enable with {@code -Dslothyhub.debug.draw=true}. */
+   private static final boolean DRAW_PATH_LOG_ENABLED = Boolean.getBoolean("slothyhub.debug.draw");
+
+   private static void logResolvedMethodsOnce() {
+      if (!DIAG_LOGGED.compareAndSet(false, true)) return;
+      try {
+         org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger("slothyhub");
+         log.info("[DrawHelper] LEGACY_GUI_FLUSH        = {}", LEGACY_GUI_FLUSH);
+         log.info("[DrawHelper] DRAW_TEXTURE_METHOD     = {}", DRAW_TEXTURE_METHOD == null ? "null" : DRAW_TEXTURE_METHOD.toGenericString());
+         log.info("[DrawHelper] DRAW_TEXTURE_FIRST_ARG  = {}", DRAW_TEXTURE_FIRST_ARG == null ? "null" : DRAW_TEXTURE_FIRST_ARG.getClass().getName());
+         log.info("[DrawHelper] LEGACY_REGION_BLIT      = {}", LEGACY_REGION_BLIT == null ? "null" : LEGACY_REGION_BLIT.toGenericString());
+         log.info("[DrawHelper] LEGACY_BLIT_SPRITE      = {}", LEGACY_BLIT_SPRITE == null ? "null" : LEGACY_BLIT_SPRITE.toGenericString());
+         log.info("[DrawHelper] MODERN_BLIT_SPRITE      = {}", MODERN_BLIT_SPRITE == null ? "null" : MODERN_BLIT_SPRITE.toGenericString());
+         log.info("[DrawHelper] PRE_V4_DRAW_TEX_9       = {}", PRE_V4_DRAW_TEX_9 == null ? "null" : PRE_V4_DRAW_TEX_9.toGenericString());
+         log.info("[DrawHelper] PRE_V4_DRAW_TEX_7       = {}", PRE_V4_DRAW_TEX_7 == null ? "null" : PRE_V4_DRAW_TEX_7.toGenericString());
+         log.info("[DrawHelper] ALL class_332 candidate draw methods on this MC version:");
+         for (Method m : class_332.class.getMethods()) {
+            String n = m.getName();
+            if (!n.contains("draw") && !n.startsWith("method_252") && !n.startsWith("method_253") && !"method_52709".equals(n)) continue;
+            Class<?>[] p = m.getParameterTypes();
+            if (p.length < 5) continue;
+            StringBuilder sig = new StringBuilder("  ").append(m.getReturnType().getSimpleName()).append(' ').append(n).append('(');
+            for (int i = 0; i < p.length; i++) {
+               if (i > 0) sig.append(", ");
+               sig.append(p[i].getSimpleName());
+            }
+            sig.append(')');
+            log.info(sig.toString());
+         }
+      } catch (Throwable ignored) {}
+   }
+
+   private static void logDrawPath(String tag, class_2960 id) {
+      if (!DRAW_PATH_LOG_ENABLED) return;
+      int n = DRAW_PATH_LOG_COUNT.getAndIncrement();
+      if (n < 24) {  // first 24 calls only, to avoid log spam
+         try {
+            org.slf4j.LoggerFactory.getLogger("slothyhub")
+                .info("[DrawHelper] draw {} via {}", id, tag);
+         } catch (Throwable ignored) {}
+      }
+   }
 
    private static Constructor<class_1058> SPRITE_CTOR_6;
    private static Constructor<class_1058> SPRITE_CTOR_7;
@@ -261,6 +308,71 @@ public final class DrawHelper {
       } catch (ReflectiveOperationException e) {
          return null;
       }
+   }
+
+   /**
+    * MC 1.20.x – 1.21.3 {@code DrawContext.drawTexture(Identifier, x, y, [int|float] u, [int|float] v, w, h[, texW, texH])}.
+    * <p>Picks the {@code class_2960}-first overload with {@code totalParamCount} parameters and prefers
+    * {@code float} u/v variants when both exist. The modern (1.21.4+) resolver explicitly skips these
+    * signatures, so on older versions we never had a way to actually render dynamic textures.
+    */
+   private static Method resolvePreV4DrawTexture(int totalParamCount) {
+      Method intVariant = null;
+      Method floatVariant = null;
+      for (Method m : class_332.class.getMethods()) {
+         Class<?>[] p = m.getParameterTypes();
+         if (p.length != totalParamCount) continue;
+         if (p[0] != class_2960.class) continue;
+         if (p[1] != int.class || p[2] != int.class) continue;
+         // params 3,4 are u,v (either both int or both float)
+         boolean floatUv = p[3] == float.class && p[4] == float.class;
+         boolean intUv   = p[3] == int.class   && p[4] == int.class;
+         if (!floatUv && !intUv) continue;
+         // remaining params must all be int (w, h, [texW, texH])
+         boolean tailOk = true;
+         for (int i = 5; i < p.length; i++) {
+            if (p[i] != int.class) { tailOk = false; break; }
+         }
+         if (!tailOk) continue;
+         try { m.setAccessible(true); } catch (Exception ignored) {}
+         if (floatUv) floatVariant = m;
+         else intVariant = m;
+      }
+      return floatVariant != null ? floatVariant : intVariant;
+   }
+
+   /** Invokes a pre-1.21.4 drawTexture overload (Identifier-first). Returns true on success. */
+   private static boolean invokePreV4DrawTexture(
+      class_332 ctx, class_2960 id, int x, int y, float u, float v,
+      int width, int height, int texW, int texH
+   ) {
+      int tw = Math.max(1, texW);
+      int th = Math.max(1, texH);
+      Method m9 = PRE_V4_DRAW_TEX_9;
+      if (m9 != null) {
+         try {
+            Class<?>[] p = m9.getParameterTypes();
+            if (p[3] == float.class) {
+               m9.invoke(ctx, id, x, y, u, v, width, height, tw, th);
+            } else {
+               m9.invoke(ctx, id, x, y, (int) u, (int) v, width, height, tw, th);
+            }
+            return true;
+         } catch (ReflectiveOperationException ignored) {}
+      }
+      Method m7 = PRE_V4_DRAW_TEX_7;
+      if (m7 != null) {
+         try {
+            Class<?>[] p = m7.getParameterTypes();
+            if (p[3] == float.class) {
+               m7.invoke(ctx, id, x, y, u, v, width, height);
+            } else {
+               m7.invoke(ctx, id, x, y, (int) u, (int) v, width, height);
+            }
+            return true;
+         } catch (ReflectiveOperationException ignored) {}
+      }
+      return false;
    }
 
    /** {@code DrawContext.method_52709} — draws via sprite UVs (works for dynamic textures). */
@@ -865,6 +977,7 @@ public final class DrawHelper {
 
    public static void drawTexture(class_332 ctx, class_2960 id, int x, int y, float u, float v, int width, int height, int texW, int texH) {
       if (ctx == null || id == null || width <= 0 || height <= 0) return;
+      logResolvedMethodsOnce();
       int tw = Math.max(1, texW);
       int th = Math.max(1, texH);
 
@@ -872,25 +985,53 @@ public final class DrawHelper {
          flushDraw(ctx);
       }
 
-      // 1.21.8+: blit by registered texture id (reliable for pack/icon thumbnails).
-      if (!LEGACY_GUI_FLUSH && invokeGridBlit(ctx, id, x, y, u, v, width, height, tw, th)) {
-         flushDraw(ctx);
-         return;
-      }
-
+      // Prefer sprite-blit FIRST when the texture was registered as a dynamic GUI sprite
+      // (pack icons, picker thumbnails, logo). Grid-blit treats (width,height) as both the
+      // screen quad AND the UV sample window in a (texW,texH) sheet - which silently samples
+      // only the top-left of dynamic full-image textures whose real size is e.g. 736x1103.
+      // Sprite-blit uses the sprite's own UV mapping covering the entire image, which is
+      // what dynamic textures want. We still fall through to grid-blit for atlas regions
+      // where the caller actually wants a sub-rectangle of a bigger sheet.
       class_1058 sprite = GUI_SPRITES.get(id);
-      if (sprite != null && u == 0f && v == 0f) {
+      boolean canSpriteBlit = LEGACY_GUI_FLUSH
+         ? (LEGACY_BLIT_SPRITE != null && LEGACY_RENDER_LAYER != null)
+         : (MODERN_BLIT_SPRITE != null && DRAW_TEXTURE_FIRST_ARG != null);
+      if (sprite != null && u == 0f && v == 0f && canSpriteBlit) {
          try {
             invokeSpriteBlit(ctx, sprite, x, y, width, height);
+            logDrawPath("spriteBlit", id);
             flushDraw(ctx);
             return;
          } catch (ReflectiveOperationException ignored) {
          }
       }
 
+      // No sprite-blit available (MC 1.20.x - 1.21.3 lack BlitSprite/RenderPipeline overloads).
+      // Every remaining path expects (u, v, w, h, texW, texH) and computes UV as
+      // (u/texW, v/texH) .. ((u+w)/texW, (v+h)/texH). When a sprite IS registered (i.e. the
+      // caller meant "draw this whole dynamic texture into a (width x height) quad") but the
+      // image's actual pixel size happens to be larger or smaller than the quad - e.g. a
+      // 736x1103 pack poster drawn into an 80x80 thumb, or a 16x96 sword frame drawn into a
+      // 24x24 picker icon - the caller-provided texW/texH would sample only the top-left
+      // (w/texW, h/texH) of the image. Force UV to cover the full image by overriding texW/texH
+      // to match the screen quad size. Callers that genuinely want atlas-region sampling do
+      // NOT register a sprite for the id and therefore are unaffected.
+      if (sprite != null && u == 0f && v == 0f) {
+         tw = Math.max(1, width);
+         th = Math.max(1, height);
+      }
+
+      // 1.21.8+: blit by registered texture id (reliable for atlas sub-regions).
+      if (!LEGACY_GUI_FLUSH && invokeGridBlit(ctx, id, x, y, u, v, width, height, tw, th)) {
+         logDrawPath("modernGridBlit", id);
+         flushDraw(ctx);
+         return;
+      }
+
       // 1.21.4–1.21.7: RenderLayer.getGuiTextured grid blit (same path PackHub uses on 1.21.4).
       if (LEGACY_GUI_FLUSH && DRAW_TEXTURE_FIRST_ARG instanceof Function) {
          if (invokeGridBlit(ctx, id, x, y, u, v, width, height, tw, th)) {
+            logDrawPath("legacyFunctionGridBlit", id);
             flushDraw(ctx);
             return;
          }
@@ -899,6 +1040,7 @@ public final class DrawHelper {
       if (LEGACY_GUI_FLUSH && LEGACY_REGION_BLIT != null) {
          try {
             invokeLegacyRegionBlit(ctx, id, x, y, u, v, width, height, tw, th);
+            logDrawPath("legacyRegionBlit", id);
          } catch (ReflectiveOperationException ignored) {
          }
          flushDraw(ctx);
@@ -906,8 +1048,21 @@ public final class DrawHelper {
       }
 
       if (invokeGridBlit(ctx, id, x, y, u, v, width, height, tw, th)) {
+         logDrawPath("modernGridBlitFallback", id);
          flushDraw(ctx);
+         return;
       }
+
+      // Final fallback — MC 1.20.x / 1.21.0-1.21.3: vanilla drawTexture(Identifier, ...).
+      // The modern resolver explicitly skips Identifier-first overloads, so without this path
+      // dynamic textures (pack icons, custom GUI assets) never actually render on older versions.
+      if (invokePreV4DrawTexture(ctx, id, x, y, u, v, width, height, tw, th)) {
+         logDrawPath("preV4DrawTexture", id);
+         flushDraw(ctx);
+         return;
+      }
+
+      logDrawPath("ALL-FAILED", id);
    }
 
    private static Object[] resolveMatrices() {

@@ -1,0 +1,25 @@
+name = "slothys-tree-bot"
+main = "src/index.js"
+compatibility_date = "2026-05-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+# KV namespace used to count active mod clients (15-min heartbeat window).
+# Create one with:
+#   npx wrangler kv namespace create HEARTBEATS
+# then paste the printed `id` here.
+[[kv_namespaces]]
+binding   = "HEARTBEATS"
+id        = "760cc799d45e48c5a7b83e7dd819ecb0"
+# preview_id = "PASTE-KV-PREVIEW-ID-HERE"   # optional, for `wrangler dev`
+
+[vars]
+GH_OWNER       = "IlySlothy"
+GH_REPO        = "Slothy-s-Tree"
+PACKS_JSON_URL = "https://raw.githubusercontent.com/IlySlothy/Slothy-s-Tree/main/src/main/resources/assets/slothyhub/packs.json"
+
+# Secrets (set with `wrangler secret put <NAME>`):
+#   DISCORD_PUBLIC_KEY   - Application -> General Information -> Public Key
+#   DISCORD_TOKEN        - Application -> Bot -> Reset Token
+#   DISCORD_APP_ID       - Application -> General Information -> Application ID
+#   GITHUB_TOKEN         - optional, raises GitHub API rate limit (60 -> 5000/hr)

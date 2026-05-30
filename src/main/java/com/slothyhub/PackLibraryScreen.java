@@ -145,10 +145,12 @@ public class PackLibraryScreen extends class_437 {
                 st.toLowerCase(Locale.ROOT).contains("fail") ? Ui.COL_DANGER : Ui.COL_ACCENT, false);
         }
 
-        int btnW = 72, btnH = 22;
-        int applyX = x + w - btnW - PAD - btnW - 8;
+        int btnW = 64, btnH = 22, btnGap = 6;
         int delX = x + w - btnW - PAD;
+        int applyX = delX - btnW - btnGap;
+        int customX = applyX - btnW - btnGap;
         int btnY = y + (CARD_H - btnH) / 2;
+        drawMiniBtn(ctx, customX, btnY, btnW, btnH, "EDIT", Ui.COL_ACCENT_H, mx, my);
         drawMiniBtn(ctx, applyX, btnY, btnW, btnH, "APPLY", Ui.COL_ACCENT, mx, my);
         drawMiniBtn(ctx, delX, btnY, btnW, btnH, "DELETE", Ui.COL_DANGER, mx, my);
     }
@@ -183,10 +185,14 @@ public class PackLibraryScreen extends class_437 {
         for (Pack pack : packs) {
             if (y + CARD_H < top) { y += CARD_H; continue; }
             if (y > bot) break;
-            int btnW = 72, btnH = 22;
-            int applyX = cardX + cardW - btnW - PAD - btnW - 8;
+            int btnW = 64, btnH = 22, btnGap = 6;
             int delX = cardX + cardW - btnW - PAD;
+            int applyX = delX - btnW - btnGap;
+            int customX = applyX - btnW - btnGap;
             int btnY = y + (CARD_H - btnH) / 2;
+            if (mx >= customX && mx <= customX + btnW && my >= btnY && my <= btnY + btnH) {
+                customizePack(pack); return true;
+            }
             if (mx >= applyX && mx <= applyX + btnW && my >= btnY && my <= btnY + btnH) {
                 applyPack(pack); return true;
             }
@@ -196,6 +202,10 @@ public class PackLibraryScreen extends class_437 {
             y += CARD_H;
         }
         return false;
+    }
+
+    private void customizePack(Pack pack) {
+        class_310.method_1551().method_1507(new TexturePickerScreen(this, pack));
     }
 
     private void applyPack(Pack pack) {

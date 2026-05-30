@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "slothyhub",
+  "version": "${version}",
+  "name": "Slothy's Tree (Legacy 1.20-1.21.1)",
+  "description": "Legacy build of Slothy's Tree for Minecraft 1.20 through 1.21.1. The bundled CIT engine automatically yields to CIT Resewn / Chime / other CIT-providing mods when one is present in the mods folder, so installing this alongside CIT Resewn is safe.",
+  "authors": ["IlySlothy"],
+  "contact": {
+    "homepage": "https://github.com/IlySlothy/Slothy-s-Tree",
+    "sources":  "https://github.com/IlySlothy/Slothy-s-Tree",
+    "issues":   "https://github.com/IlySlothy/Slothy-s-Tree/issues"
+  },
+  "license": "MIT",
+  "icon": "assets/slothyhub/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["com.slothyhub.SlothyHubMod"]
+  },
+  "mixins": ["slothyhub.mixins.json"],
+  "accessWidener": "slothyhub.accesswidener",
+  "depends": {
+    "fabricloader": ">=0.14.0",
+    "minecraft": ">=1.20 <1.21.2",
+    "java": ">=17",
+    "fabric-api": "*"
+  }
+}

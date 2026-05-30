@@ -1,0 +1,6 @@
+# Copy to `.dev.vars` for local `wrangler dev` testing.
+# Production secrets are set with `wrangler secret put <NAME>`.
+DISCORD_PUBLIC_KEY=""
+DISCORD_TOKEN=""
+DISCORD_APP_ID=""
+GITHUB_TOKEN=""

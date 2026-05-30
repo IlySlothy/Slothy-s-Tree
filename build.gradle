@@ -95,6 +95,39 @@ tasks.register('buildAll') {
         project(':slothyhub-legacy-1.21.4').tasks.named('assemble')
 }
 
+tasks.register('copyReleaseAssets') {
+    dependsOn tasks.named('buildAll')
+    doLast {
+        def dest = file('release-assets')
+        dest.mkdirs()
+        copy {
+            from layout.buildDirectory.dir('libs')
+            include 'slothyhub-1.0.3-mc1.21.8.jar'
+            into dest
+        }
+        copy {
+            from project(':slothyhub-1.21.11').layout.buildDirectory.dir('libs')
+            include 'slothyhub-1.0.3-mc1.21.11.jar'
+            into dest
+        }
+        copy {
+            from project(':modern-cit').layout.buildDirectory.dir('libs')
+            include 'slothyhub-cit-1.0.3-mc1.21.11.jar'
+            into dest
+        }
+        copy {
+            from project(':slothyhub-legacy-1.21.4').layout.buildDirectory.dir('libs')
+            include 'slothyhub-1.0.3-mc1.20-1.21.1.jar'
+            into dest
+        }
+        copy {
+            from project(':legacy-cit').layout.buildDirectory.dir('libs')
+            include 'slothyhub-legacy-cit-1.0.3-mc1.21.8-legacy.jar'
+            into dest
+        }
+    }
+}
+
 tasks.register('copyFeatherMods111') {
     dependsOn tasks.named('buildAll')
     doLast {

@@ -195,28 +195,34 @@ public final class CitItemRenderer {
         return CitStackNames.resolve(stack);
     }
 
-    private static long lastNearMissLogMs;
-    private static String lastNearMissKey = "";
-    private static long lastMatchLogMs;
-    private static String lastMatchKey = "";
+    // CIT match/near-miss logging is silent by default - it fires on every frame an item
+    // is rendered, which spams thousands of lines per minute and can stall lower-end clients.
+    // Enable diagnostics by launching with -Dslothyhub.debug.cit=true.
+    private static final boolean CIT_DEBUG_LOG =
+        Boolean.parseBoolean(System.getProperty("slothyhub.debug.cit", "false"));
+    private static final java.util.Map<String, Long> LAST_MATCH_LOG_MS = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final java.util.Map<String, Long> LAST_NEAR_MISS_LOG_MS = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final long LOG_THROTTLE_MS = 8000L;
 
     private static void logMatchOnce(String itemId, CitRule rule, List<String> names) {
-        long now = System.currentTimeMillis();
+        if (!CIT_DEBUG_LOG) return;
         String key = rule.id + "|" + itemId;
-        if (key.equals(lastMatchKey) && now - lastMatchLogMs < 8000) return;
-        lastMatchKey = key;
-        lastMatchLogMs = now;
+        long now = System.currentTimeMillis();
+        Long last = LAST_MATCH_LOG_MS.get(key);
+        if (last != null && now - last < LOG_THROTTLE_MS) return;
+        LAST_MATCH_LOG_MS.put(key, now);
         SlothyHubMod.LOGGER.info("CIT: matched rule {} for {} (names={})", rule.id, itemId, names);
     }
 
-    /** Throttled log when a netherite sword has names but no CIT rule matched. */
+    /** Throttled diagnostic when a netherite sword has names but no CIT rule matched. */
     private static void logNearMiss(String itemId, List<String> names) {
+        if (!CIT_DEBUG_LOG) return;
         if (!itemId.contains("netherite_sword")) return;
-        long now = System.currentTimeMillis();
         String key = itemId + "|" + String.join(",", names);
-        if (key.equals(lastNearMissKey) && now - lastNearMissLogMs < 8000) return;
-        lastNearMissKey = key;
-        lastNearMissLogMs = now;
+        long now = System.currentTimeMillis();
+        Long last = LAST_NEAR_MISS_LOG_MS.get(key);
+        if (last != null && now - last < LOG_THROTTLE_MS) return;
+        LAST_NEAR_MISS_LOG_MS.put(key, now);
         if (names.isEmpty()) {
             SlothyHubMod.LOGGER.info("CIT: no rule matched {} (no display strings)", itemId);
         } else if (names.size() <= 2 && names.stream().allMatch(n -> n.toLowerCase(Locale.ROOT).contains("netherite"))) {
@@ -428,3 +434,4 @@ public final class CitItemRenderer {
         }
     }
 }
+

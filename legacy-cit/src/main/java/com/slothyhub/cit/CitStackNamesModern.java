@@ -33,7 +33,8 @@ final class CitStackNamesModern {
         Map.entry("mythic", "Warden Sword"),
         Map.entry("exotic", "Warden Sword"),
         Map.entry("warden", "Warden Sword"),
-        Map.entry("hippo", "Hippo Sword")
+        Map.entry("hippo", "Hippo Sword"),
+        Map.entry("bubble", "Bubble Coral")
     );
 
     private static final Method STACK_GET = resolveStackGet();
@@ -188,7 +189,7 @@ final class CitStackNamesModern {
                 add.accept(entry.getValue());
             }
         }
-        String[] known = { "noob_sword", "good_sword", "pro_sword", "perfect_sword", "warden_sword", "hippo_sword" };
+        String[] known = { "noob_sword", "good_sword", "pro_sword", "perfect_sword", "warden_sword", "hippo_sword", "bubble_coral" };
         for (String token : known) {
             if (lower.contains(token)) {
                 add.accept(humanizeToken(token));
