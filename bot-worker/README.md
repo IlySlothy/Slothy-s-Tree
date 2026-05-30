@@ -18,6 +18,33 @@ The same Worker also serves the mod-client heartbeat endpoint that feeds
 | POST   | `/v1/heartbeat`  | Mod clients ping with `{ "clientId": "<stable-uuid>" }`    |
 | POST   | `/v1/pack-submit`| Mod uploads a built pack zip — **DMs you** and/or **opens a ticket** |
 
+### Approve or deny uploads (Discord commands)
+
+When a pack is submitted, the bot stores it for **30 days** and includes a **submission ID** in the DM/ticket.
+
+Only `PACK_REVIEW_OWNER_USER_ID` can run these (you):
+
+| Command | What it does |
+| ------- | ------------ |
+| `/pack-approve id:<id>` | Uploads the zip to `docs/downloads/`, adds an entry to `docs/api/packs.json`, and publishes via GitHub Pages |
+| `/pack-deny id:<id> reason:<optional>` | Rejects the submission and removes the stored zip |
+
+**Requires `GITHUB_TOKEN`** (secret) with **repo** write access on `IlySlothy/Slothy-s-Tree`:
+
+```bash
+npx wrangler secret put GITHUB_TOKEN
+```
+
+Use a [fine-grained PAT](https://github.com/settings/tokens?type=beta) or classic token scoped to **Contents: Read and write** on that repo.
+
+After `/pack-approve`, GitHub Pages redeploys in ~1 minute. Mod users press **Reconnect** in the pack browser to see the new pack.
+
+Register the new slash commands after deploy:
+
+```bash
+$env:DISCORD_TOKEN="..."; $env:DISCORD_APP_ID="..."; npm run register
+```
+
 ### Pack upload review (mod → Discord)
 
 When someone hits **UPLOAD** in **My Pack Library**, the mod POSTs the zip to `/v1/pack-submit`.
@@ -145,7 +172,7 @@ $env:DISCORD_TOKEN="..."; $env:DISCORD_APP_ID="..."; npm run register
 DISCORD_TOKEN="..." DISCORD_APP_ID="..." npm run register
 ```
 
-This pushes `/modinfo`, `/download`, `/setup`, `/invite`, `/modstats` to
+This pushes `/modinfo`, `/download`, `/setup`, `/invite`, `/modstats`, `/pack-approve`, and `/pack-deny` to
 Discord globally. New commands take up to an hour to fan out across all
 servers; existing-server upgrades are usually instant.
 

@@ -34,45 +34,47 @@ const USER_AGENT        = 'slothys-tree-bot/worker (+https://github.com/IlySloth
 const MAX_PACK_BYTES    = 8 * 1024 * 1024;
 const SUBMIT_RATE_MAX   = 3;
 const SUBMIT_RATE_TTL   = 60 * 60;
+const SUBMIT_STORE_TTL  = 30 * 24 * 60 * 60;
+const PACKS_JSON_PATH   = 'docs/api/packs.json';
 
 const RELEASES = [
     {
-        id: '1.0.3-mc1.21.11',
-        version: '1.0.3',
-        label: 'v1.0.3 - MC 1.21.11',
+        id: '1.0.4-mc1.21.11',
+        version: '1.0.4',
+        label: 'v1.0.4 - MC 1.21.11',
         description: 'For Minecraft 1.21.9 - 1.21.11 (Fabric / Feather)',
-        jar: 'slothyhub-1.0.3-mc1.21.11.jar',
-        tag: 'v1.0.3-mc1.21.11',
+        jar: 'slothyhub-1.0.4-mc1.21.11.jar',
+        tag: 'v1.0.4-mc1.21.11',
         mc: '1.21.9 - 1.21.11',
-        downloadUrl: 'https://github.com/IlySlothy/Slothy-s-Tree/releases/download/v1.0.3-mc1.21.11/slothyhub-1.0.3-mc1.21.11.jar',
-        pageUrl:     'https://github.com/IlySlothy/Slothy-s-Tree/releases/tag/v1.0.3-mc1.21.11',
-        extraJar: 'slothyhub-cit-1.0.3-mc1.21.11.jar',
-        extraUrl:  'https://github.com/IlySlothy/Slothy-s-Tree/releases/download/v1.0.3-mc1.21.11/slothyhub-cit-1.0.3-mc1.21.11.jar',
+        downloadUrl: 'https://github.com/IlySlothy/Slothy-s-Tree/releases/download/v1.0.4-mc1.21.11/slothyhub-1.0.4-mc1.21.11.jar',
+        pageUrl:     'https://github.com/IlySlothy/Slothy-s-Tree/releases/tag/v1.0.4-mc1.21.11',
+        extraJar: 'slothyhub-cit-1.0.4-mc1.21.11.jar',
+        extraUrl:  'https://github.com/IlySlothy/Slothy-s-Tree/releases/download/v1.0.4-mc1.21.11/slothyhub-cit-1.0.4-mc1.21.11.jar',
         extraNote: 'Required CIT companion on 1.21.9+',
     },
     {
-        id: '1.0.3-mc1.21.8',
-        version: '1.0.3',
-        label: 'v1.0.3 - MC 1.21.8',
+        id: '1.0.4-mc1.21.8',
+        version: '1.0.4',
+        label: 'v1.0.4 - MC 1.21.8',
         description: 'For Minecraft 1.21.8 (Fabric)',
-        jar: 'slothyhub-1.0.3-mc1.21.8.jar',
-        tag: 'v1.0.3-mc1.21.8',
+        jar: 'slothyhub-1.0.4-mc1.21.8.jar',
+        tag: 'v1.0.4-mc1.21.8',
         mc: '1.21.8',
-        downloadUrl: 'https://github.com/IlySlothy/Slothy-s-Tree/releases/download/v1.0.3-mc1.21.8/slothyhub-1.0.3-mc1.21.8.jar',
-        pageUrl:     'https://github.com/IlySlothy/Slothy-s-Tree/releases/tag/v1.0.3-mc1.21.8',
+        downloadUrl: 'https://github.com/IlySlothy/Slothy-s-Tree/releases/download/v1.0.4-mc1.21.8/slothyhub-1.0.4-mc1.21.8.jar',
+        pageUrl:     'https://github.com/IlySlothy/Slothy-s-Tree/releases/tag/v1.0.4-mc1.21.8',
     },
     {
-        id: '1.0.3-mc1.20-1.21.1',
-        version: '1.0.3',
-        label: 'v1.0.3 - MC 1.20 - 1.21.1',
+        id: '1.0.4-mc1.20-1.21.1',
+        version: '1.0.4',
+        label: 'v1.0.4 - MC 1.20 - 1.21.1',
         description: 'Legacy build (MC 1.20 - 1.21.1)',
-        jar: 'slothyhub-1.0.3-mc1.20-1.21.1.jar',
-        tag: 'v1.0.3-mc1.20-1.21.1',
+        jar: 'slothyhub-1.0.4-mc1.20-1.21.1.jar',
+        tag: 'v1.0.4-mc1.20-1.21.1',
         mc: '1.20 - 1.21.1',
-        downloadUrl: 'https://github.com/IlySlothy/Slothy-s-Tree/releases/download/v1.0.3-mc1.20-1.21.1/slothyhub-1.0.3-mc1.20-1.21.1.jar',
-        pageUrl:     'https://github.com/IlySlothy/Slothy-s-Tree/releases/tag/v1.0.3-mc1.20-1.21.1',
-        extraJar: 'slothyhub-legacy-cit-1.0.3-mc1.21.8-legacy.jar',
-        extraUrl:  'https://github.com/IlySlothy/Slothy-s-Tree/releases/download/v1.0.3-mc1.20-1.21.1/slothyhub-legacy-cit-1.0.3-mc1.21.8-legacy.jar',
+        downloadUrl: 'https://github.com/IlySlothy/Slothy-s-Tree/releases/download/v1.0.4-mc1.20-1.21.1/slothyhub-1.0.4-mc1.20-1.21.1.jar',
+        pageUrl:     'https://github.com/IlySlothy/Slothy-s-Tree/releases/tag/v1.0.4-mc1.20-1.21.1',
+        extraJar: 'slothyhub-legacy-cit-1.0.4-mc1.21.8-legacy.jar',
+        extraUrl:  'https://github.com/IlySlothy/Slothy-s-Tree/releases/download/v1.0.4-mc1.20-1.21.1/slothyhub-legacy-cit-1.0.4-mc1.21.8-legacy.jar',
         extraNote: 'CIT companion for MC 1.20 - 1.21.7',
     },
 ];
@@ -256,7 +258,9 @@ function buildPackReviewPayload(env, meta, zipBytes, filename, context) {
     descLines.push(`**Client:** \`${meta.clientId.slice(0, 8)}…\``);
     descLines.push(`**File:** \`${filename}\` (${(zipBytes.byteLength / 1024).toFixed(1)} KB)`);
     if (context === 'ticket') {
-        descLines.push('', 'Approve by adding the pack to `docs/api/packs.json` and publishing a release asset.');
+        descLines.push('', 'Use `/pack-approve id:<submission id>` to publish, or `/pack-deny id:<submission id>`.');
+    } else {
+        descLines.push('', `Review: \`/pack-approve id:${meta.submissionId}\` or \`/pack-deny id:${meta.submissionId}\``);
     }
 
     const ownerId = trimField(env.PACK_REVIEW_OWNER_USER_ID, 32);
@@ -528,10 +532,24 @@ function channelButtonRow() {
 
 let STATS_CACHE = null;
 
-async function ghFetch(env, pathname) {
-    const headers = { 'User-Agent': USER_AGENT, 'Accept': 'application/vnd.github+json' };
+async function ghRequest(env, method, pathname, body = null) {
+    const headers = {
+        'User-Agent': USER_AGENT,
+        'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+    };
     if (env.GITHUB_TOKEN) headers.Authorization = `Bearer ${env.GITHUB_TOKEN}`;
-    const res = await fetch(`https://api.github.com${pathname}`, { headers });
+    const init = { method, headers };
+    if (body != null) {
+        headers['Content-Type'] = 'application/json';
+        init.body = JSON.stringify(body);
+    }
+    const res = await fetch(`https://api.github.com${pathname}`, init);
+    return res;
+}
+
+async function ghFetch(env, pathname) {
+    const res = await ghRequest(env, 'GET', pathname);
     if (!res.ok) throw new Error(`GitHub ${pathname} -> HTTP ${res.status}`);
     return res.json();
 }
@@ -665,6 +683,14 @@ async function handleCommand(interaction, env, ctx) {
         return deferred({ ephemeral: true });
     }
 
+    if (name === 'pack-approve') {
+        return handlePackReviewCommand(interaction, env, ctx, 'approve');
+    }
+
+    if (name === 'pack-deny') {
+        return handlePackReviewCommand(interaction, env, ctx, 'deny');
+    }
+
     return reply({ content: `Unknown command: \`${name}\`` });
 }
 
@@ -769,6 +795,257 @@ async function checkSubmitRate(env, clientId) {
     return null;
 }
 
+function slugifyPackId(text, max = 36) {
+    return String(text ?? '')
+        .replace(/[^a-z0-9]+/gi, '-')
+        .replace(/^-+|-+$/g, '')
+        .toLowerCase()
+        .slice(0, max) || 'pack';
+}
+
+function bytesToBase64(bytes) {
+    if (typeof bytes === 'string') return btoa(bytes);
+    const arr = bytes instanceof ArrayBuffer ? new Uint8Array(bytes) : bytes;
+    let binary = '';
+    const chunk = 0x8000;
+    for (let i = 0; i < arr.length; i += chunk) {
+        binary += String.fromCharCode(...arr.subarray(i, i + chunk));
+    }
+    return btoa(binary);
+}
+
+function decodeGitHubContent(content) {
+    const raw = content.replace(/\n/g, '');
+    const bin = atob(raw);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+}
+
+function interactionUserId(interaction) {
+    return interaction.member?.user?.id ?? interaction.user?.id ?? '';
+}
+
+function isPackReviewer(interaction, env) {
+    const ownerId = trimField(env.PACK_REVIEW_OWNER_USER_ID, 32);
+    if (!ownerId) return false;
+    return interactionUserId(interaction) === ownerId;
+}
+
+function packsSiteBase(env) {
+    return trimField(env.PACKS_SITE_BASE, 200) || 'https://ilyslothy.github.io/Slothy-s-Tree';
+}
+
+async function savePendingSubmission(env, submissionId, meta, zipBytes, filename) {
+    const record = {
+        ...meta,
+        filename,
+        status: 'pending',
+        submittedAt: new Date().toISOString(),
+    };
+    await env.HEARTBEATS.put(`ps:meta:${submissionId}`, JSON.stringify(record), {
+        expirationTtl: SUBMIT_STORE_TTL,
+    });
+    await env.HEARTBEATS.put(`ps:zip:${submissionId}`, zipBytes, {
+        expirationTtl: SUBMIT_STORE_TTL,
+    });
+}
+
+async function loadPendingSubmission(env, submissionId) {
+    const id = trimField(submissionId, 16).toLowerCase();
+    if (!id) return null;
+    const metaRaw = await env.HEARTBEATS.get(`ps:meta:${id}`);
+    if (!metaRaw) return null;
+    const meta = JSON.parse(metaRaw);
+    if (meta.status && meta.status !== 'pending') {
+        return { meta, zipBytes: null, alreadyHandled: meta.status };
+    }
+    const zipBytes = await env.HEARTBEATS.get(`ps:zip:${id}`, 'arrayBuffer');
+    if (!zipBytes || zipBytes.byteLength === 0) return null;
+    return { meta, zipBytes, alreadyHandled: null };
+}
+
+async function finalizeSubmission(env, submissionId, status, extra = {}) {
+    const id = trimField(submissionId, 16).toLowerCase();
+    const metaRaw = await env.HEARTBEATS.get(`ps:meta:${id}`);
+    if (!metaRaw) return;
+    const meta = { ...JSON.parse(metaRaw), status, ...extra, resolvedAt: new Date().toISOString() };
+    await env.HEARTBEATS.put(`ps:meta:${id}`, JSON.stringify(meta), { expirationTtl: 7 * 24 * 3600 });
+    await env.HEARTBEATS.delete(`ps:zip:${id}`);
+}
+
+function buildCatalogEntry(meta, filename, packUrl, catalogId) {
+    const author = meta.authorName || 'Community';
+    return {
+        id: catalogId,
+        name: meta.packName,
+        pack_filename: filename,
+        author_name: author,
+        author_id: slugifyPackId(author, 32),
+        showcase_path: '',
+        pack_url: packUrl,
+        tags: ['community', 'pvp'],
+        is_zip: true,
+        has_local_file: false,
+        star_count: 0,
+        downloads: 0,
+        sha256: '',
+        viewer_starred: false,
+    };
+}
+
+async function publishApprovedPack(env, meta, zipBytes, filename) {
+    if (!env.GITHUB_TOKEN) {
+        throw new Error('GITHUB_TOKEN secret is not set — run `wrangler secret put GITHUB_TOKEN` with repo write access.');
+    }
+
+    const submissionId = meta.submissionId;
+    const catalogId = `${slugifyPackId(meta.packName, 28)}-${submissionId}`;
+    const safeFilename = filename.replace(/[^\w.\- ()\[\]]+/g, '_').slice(0, 80);
+    const downloadPath = `docs/downloads/${safeFilename}`;
+    const siteBase = packsSiteBase(env);
+    const packUrl = `${siteBase}/downloads/${encodeURI(safeFilename)}`;
+
+    const zipRes = await ghRequest(
+        env, 'PUT',
+        `/repos/${env.GH_OWNER}/${env.GH_REPO}/contents/${downloadPath}`,
+        {
+            message: `Add community pack: ${meta.packName} (${submissionId})`,
+            content: bytesToBase64(zipBytes),
+        },
+    );
+    if (!zipRes.ok) {
+        const text = await zipRes.text();
+        if (zipRes.status === 422 && text.includes('already exists')) {
+            // Overwrite if same filename was retried
+            const existing = await ghFetch(env, `/repos/${env.GH_OWNER}/${env.GH_REPO}/contents/${downloadPath}`);
+            const retry = await ghRequest(
+                env, 'PUT',
+                `/repos/${env.GH_OWNER}/${env.GH_REPO}/contents/${downloadPath}`,
+                {
+                    message: `Update community pack: ${meta.packName} (${submissionId})`,
+                    content: bytesToBase64(zipBytes),
+                    sha: existing.sha,
+                },
+            );
+            if (!retry.ok) throw new Error(`GitHub upload failed: ${(await retry.text()).slice(0, 200)}`);
+        } else {
+            throw new Error(`GitHub upload failed (${zipRes.status}): ${text.slice(0, 200)}`);
+        }
+    }
+
+    const fileRes = await ghRequest(
+        env, 'GET',
+        `/repos/${env.GH_OWNER}/${env.GH_REPO}/contents/${PACKS_JSON_PATH}`,
+    );
+    if (!fileRes.ok) {
+        throw new Error(`Could not read ${PACKS_JSON_PATH}: HTTP ${fileRes.status}`);
+    }
+    const fileData = await fileRes.json();
+    const packsJson = new TextDecoder().decode(decodeGitHubContent(fileData.content));
+    const packs = JSON.parse(packsJson);
+    if (!Array.isArray(packs)) throw new Error('packs.json is not an array');
+
+    const entry = buildCatalogEntry(meta, safeFilename, packUrl, catalogId);
+    const existingIdx = packs.findIndex(p => p.id === catalogId);
+    if (existingIdx >= 0) packs[existingIdx] = entry;
+    else packs.push(entry);
+
+    const pretty = JSON.stringify(packs, null, 4) + '\n';
+    const catalogRes = await ghRequest(
+        env, 'PUT',
+        `/repos/${env.GH_OWNER}/${env.GH_REPO}/contents/${PACKS_JSON_PATH}`,
+        {
+            message: `Catalog: approve community pack ${meta.packName} (${submissionId})`,
+            content: bytesToBase64(new TextEncoder().encode(pretty)),
+            sha: fileData.sha,
+        },
+    );
+    if (!catalogRes.ok) {
+        throw new Error(`Could not update packs.json: ${(await catalogRes.text()).slice(0, 200)}`);
+    }
+
+    STATS_CACHE = null;
+    return { catalogId, packUrl, filename: safeFilename };
+}
+
+async function runPackApprove(interaction, env, submissionId) {
+    const loaded = await loadPendingSubmission(env, submissionId);
+    if (!loaded) {
+        return { content: `No pending submission found for \`${submissionId}\`. Check the ID in the upload message.` };
+    }
+    if (loaded.alreadyHandled) {
+        return { content: `Submission \`${submissionId}\` was already **${loaded.alreadyHandled}**.` };
+    }
+
+    const { meta, zipBytes } = loaded;
+    const result = await publishApprovedPack(env, meta, zipBytes, meta.filename || `${meta.packName}.zip`);
+    await finalizeSubmission(env, meta.submissionId, 'approved', {
+        catalogId: result.catalogId,
+        packUrl: result.packUrl,
+        approvedBy: interactionUserId(interaction),
+    });
+
+    return {
+        content: [
+            `✅ **Approved** \`${meta.submissionId}\` — **${meta.packName}**`,
+            `Catalog ID: \`${result.catalogId}\``,
+            `Download: ${result.packUrl}`,
+            '',
+            'GitHub Pages will refresh in ~1 minute. Mod users can press **Reconnect** to see the new pack.',
+        ].join('\n'),
+    };
+}
+
+async function runPackDeny(interaction, env, submissionId, reason) {
+    const loaded = await loadPendingSubmission(env, submissionId);
+    if (!loaded) {
+        return { content: `No pending submission found for \`${submissionId}\`.` };
+    }
+    if (loaded.alreadyHandled) {
+        return { content: `Submission \`${submissionId}\` was already **${loaded.alreadyHandled}**.` };
+    }
+
+    const { meta } = loaded;
+    await finalizeSubmission(env, meta.submissionId, 'denied', {
+        deniedBy: interactionUserId(interaction),
+        denyReason: reason || '',
+    });
+
+    let msg = `❌ **Denied** \`${meta.submissionId}\` — **${meta.packName}**`;
+    if (reason) msg += `\nReason: ${reason}`;
+    return { content: msg };
+}
+
+async function handlePackReviewCommand(interaction, env, ctx, action) {
+    if (!isPackReviewer(interaction, env)) {
+        return reply({ content: 'Only the pack review owner can approve or deny uploads.' });
+    }
+
+    const opts = interaction.data.options ?? [];
+    const submissionId = trimField(opts.find(o => o.name === 'id')?.value, 16);
+    if (!submissionId) {
+        return reply({ content: 'Pass the submission ID from the upload notification, e.g. `/pack-approve id:abc12def`.' });
+    }
+
+    const reason = trimField(opts.find(o => o.name === 'reason')?.value, 300);
+
+    ctx.waitUntil((async () => {
+        try {
+            const payload = action === 'approve'
+                ? await runPackApprove(interaction, env, submissionId)
+                : await runPackDeny(interaction, env, submissionId, reason);
+            await discordPatchFollowup(env, interaction.token, payload);
+        } catch (err) {
+            console.warn(`/pack-${action} failed:`, err.message ?? err);
+            await discordPatchFollowup(env, interaction.token, {
+                content: `Failed to ${action} \`${submissionId}\`: ${(err.message ?? String(err)).slice(0, 300)}`,
+            });
+        }
+    })());
+    return deferred({ ephemeral: true });
+}
+
 async function postPackReviewMessage(env, meta, zipBytes, filename) {
     await notifyPackSubmission(env, meta, zipBytes, filename);
 }
@@ -825,6 +1102,7 @@ async function handlePackSubmit(request, env) {
     }
 
     try {
+        await savePendingSubmission(env, submissionId, meta, zipBytes, filename);
         await postPackReviewMessage(env, meta, zipBytes, filename);
     } catch (err) {
         console.warn('pack-submit failed:', err.message ?? err);
@@ -839,6 +1117,96 @@ async function handlePackSubmit(request, env) {
         submissionId,
         message: 'Submitted for review! If approved, your pack will appear in the public browser.',
     }, { status: 201 });
+}
+
+const PERM_ADMINISTRATOR = '8';
+
+const SLASH_COMMANDS = [
+    { name: 'modinfo', description: "Show info about Slothy's Tree mod." },
+    { name: 'download', description: 'Get mod download links privately (only you see this).' },
+    {
+        name: 'setup',
+        description: '[Admins] Post the persistent download button in this channel.',
+        default_member_permissions: PERM_ADMINISTRATOR,
+        dm_permission: false,
+    },
+    { name: 'invite', description: 'Get the bot invite link (add Slothy bot to another server).' },
+    {
+        name: 'modstats',
+        description: "Show Slothy's Tree mod stats - active users, pack count, stars, downloads.",
+    },
+    {
+        name: 'pack-approve',
+        description: '[Owner] Approve a pack upload — publishes it to the public catalog.',
+        options: [{
+            name: 'id',
+            description: 'Submission ID from the upload DM/ticket',
+            type: 3,
+            required: true,
+        }],
+    },
+    {
+        name: 'pack-deny',
+        description: '[Owner] Deny a pack upload request.',
+        options: [
+            {
+                name: 'id',
+                description: 'Submission ID from the upload DM/ticket',
+                type: 3,
+                required: true,
+            },
+            {
+                name: 'reason',
+                description: 'Optional reason (for your notes)',
+                type: 3,
+                required: false,
+            },
+        ],
+    },
+];
+
+async function registerDiscordCommands(env) {
+    if (!env.DISCORD_TOKEN || !env.DISCORD_APP_ID) {
+        throw new Error('DISCORD_TOKEN and DISCORD_APP_ID must be configured');
+    }
+    const guildId = trimField(env.PACK_TICKET_GUILD_ID, 32);
+    const results = [];
+
+    if (guildId) {
+        const guildRes = await discordBotRequest(
+            env, 'PUT', `/applications/${env.DISCORD_APP_ID}/guilds/${guildId}/commands`, SLASH_COMMANDS,
+        );
+        const guildBody = await guildRes.text();
+        if (!guildRes.ok) {
+            throw new Error(`Guild command register HTTP ${guildRes.status}: ${guildBody.slice(0, 300)}`);
+        }
+        results.push({ scope: 'guild', count: JSON.parse(guildBody).length });
+    }
+
+    const globalRes = await discordBotRequest(
+        env, 'PUT', `/applications/${env.DISCORD_APP_ID}/commands`, SLASH_COMMANDS,
+    );
+    const globalBody = await globalRes.text();
+    if (!globalRes.ok) {
+        throw new Error(`Global command register HTTP ${globalRes.status}: ${globalBody.slice(0, 300)}`);
+    }
+    results.push({ scope: 'global', count: JSON.parse(globalBody).length });
+
+    return results;
+}
+
+async function handleRegisterCommands(request, env) {
+    const ownerId = trimField(env.PACK_REVIEW_OWNER_USER_ID, 32);
+    const key = trimField(request.headers.get('X-Admin-Key'), 64);
+    if (!ownerId || key !== ownerId) {
+        return new Response('forbidden', { status: 403 });
+    }
+    try {
+        const registered = await registerDiscordCommands(env);
+        return json({ ok: true, registered });
+    } catch (err) {
+        return json({ ok: false, error: (err.message ?? String(err)).slice(0, 300) }, { status: 500 });
+    }
 }
 // Main entry point
 
@@ -857,6 +1225,9 @@ export default {
         }
         if (request.method === 'POST' && url.pathname === '/v1/pack-submit') {
             return handlePackSubmit(request, env);
+        }
+        if (request.method === 'POST' && url.pathname === '/v1/register-commands') {
+            return handleRegisterCommands(request, env);
         }
 
         if (request.method === 'POST' && (url.pathname === '/' || url.pathname === '/interactions')) {

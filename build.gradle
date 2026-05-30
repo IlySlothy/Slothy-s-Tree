@@ -67,6 +67,7 @@ jar {
 
 // Legacy CIT companion jar for MC 1.20–1.21.7 (not needed on 1.21.8).
 // slothyhub-1.21.11 = main hub only for MC 1.21.9–1.21.11; slothyhub-cit = CIT companion.
+def featherMods118 = 'C:/Users/newbr/AppData/Roaming/.feather/user-mods/1.21.8-fabric'
 def featherMods111 = 'C:/Users/newbr/AppData/Roaming/.feather/user-mods/1.21.11-fabric'
 
 modrinth {
@@ -75,7 +76,7 @@ modrinth {
     versionNumber = "${project.version}+${new Date().format('yyyyMMddHHmm')}"
     versionName = "SlothyHub ${project.version}"
     versionType = 'release'
-    changelog = 'SlothyHub release for Minecraft 1.21.8 (Fabric).'
+    changelog = 'Pack upload requests, fixed upload form UI, Discord approve/deny for community packs.'
     uploadFile = tasks.remapJar
     gameVersions = ['1.21.8']
     loaders = ['fabric']
@@ -103,27 +104,40 @@ tasks.register('copyReleaseAssets') {
         dest.mkdirs()
         copy {
             from layout.buildDirectory.dir('libs')
-            include 'slothyhub-1.0.3-mc1.21.8.jar'
+            include 'slothyhub-1.0.4-mc1.21.8.jar'
             into dest
         }
         copy {
             from project(':slothyhub-1.21.11').layout.buildDirectory.dir('libs')
-            include 'slothyhub-1.0.3-mc1.21.11.jar'
+            include 'slothyhub-1.0.4-mc1.21.11.jar'
             into dest
         }
         copy {
             from project(':modern-cit').layout.buildDirectory.dir('libs')
-            include 'slothyhub-cit-1.0.3-mc1.21.11.jar'
+            include 'slothyhub-cit-1.0.4-mc1.21.11.jar'
             into dest
         }
         copy {
             from project(':slothyhub-legacy-1.21.4').layout.buildDirectory.dir('libs')
-            include 'slothyhub-1.0.3-mc1.20-1.21.1.jar'
+            include 'slothyhub-1.0.4-mc1.20-1.21.1.jar'
             into dest
         }
         copy {
             from project(':legacy-cit').layout.buildDirectory.dir('libs')
-            include 'slothyhub-legacy-cit-1.0.3-mc1.21.8-legacy.jar'
+            include 'slothyhub-legacy-cit-1.0.4-mc1.21.8-legacy.jar'
+            into dest
+        }
+    }
+}
+
+tasks.register('copyFeatherMods118') {
+    dependsOn tasks.named('build')
+    doLast {
+        def dest = file(featherMods118)
+        dest.mkdirs()
+        copy {
+            from layout.buildDirectory.dir('libs')
+            include 'slothyhub-1.0.4-mc1.21.8.jar'
             into dest
         }
     }
@@ -136,12 +150,12 @@ tasks.register('copyFeatherMods111') {
         dest.mkdirs()
         copy {
             from project(':slothyhub-1.21.11').layout.buildDirectory.dir('libs')
-            include 'slothyhub-1.0.3-mc1.21.11.jar'
+            include 'slothyhub-1.0.4-mc1.21.11.jar'
             into dest
         }
         copy {
             from project(':modern-cit').layout.buildDirectory.dir('libs')
-            include 'slothyhub-cit-1.0.3-mc1.21.11.jar'
+            include 'slothyhub-cit-1.0.4-mc1.21.11.jar'
             into dest
         }
     }

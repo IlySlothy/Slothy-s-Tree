@@ -17,7 +17,8 @@ id        = "760cc799d45e48c5a7b83e7dd819ecb0"
 [vars]
 GH_OWNER       = "IlySlothy"
 GH_REPO        = "Slothy-s-Tree"
-PACKS_JSON_URL = "https://raw.githubusercontent.com/IlySlothy/Slothy-s-Tree/main/src/main/resources/assets/slothyhub/packs.json"
+PACKS_JSON_URL = "https://raw.githubusercontent.com/IlySlothy/Slothy-s-Tree/main/docs/api/packs.json"
+PACKS_SITE_BASE = "https://ilyslothy.github.io/Slothy-s-Tree"
 
 # Pack upload review — set YOUR Discord user ID (Developer Mode → right-click profile → Copy User ID).
 # The bot DMs you on every mod upload when this is set.

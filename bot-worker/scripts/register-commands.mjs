@@ -44,6 +44,34 @@ const commands = [
         name: 'modstats',
         description: "Show Slothy's Tree mod stats - active users, pack count, stars, downloads.",
     },
+    {
+        name: 'pack-approve',
+        description: '[Owner] Approve a pack upload — publishes it to the public catalog.',
+        options: [{
+            name: 'id',
+            description: 'Submission ID from the upload DM/ticket',
+            type: 3,
+            required: true,
+        }],
+    },
+    {
+        name: 'pack-deny',
+        description: '[Owner] Deny a pack upload request.',
+        options: [
+            {
+                name: 'id',
+                description: 'Submission ID from the upload DM/ticket',
+                type: 3,
+                required: true,
+            },
+            {
+                name: 'reason',
+                description: 'Optional reason (for your notes)',
+                type: 3,
+                required: false,
+            },
+        ],
+    },
 ];
 
 const base = GUILD
