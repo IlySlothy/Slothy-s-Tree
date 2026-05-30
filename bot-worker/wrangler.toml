@@ -3,6 +3,7 @@ main = "src/index.js"
 compatibility_date = "2026-05-01"
 compatibility_flags = ["nodejs_compat"]
 workers_dev = true
+account_id = "94162d717e2449239f5376e14df4b8ba"
 
 # KV namespace used to count active mod clients (15-min heartbeat window).
 # Create one with:
@@ -17,6 +18,15 @@ id        = "760cc799d45e48c5a7b83e7dd819ecb0"
 GH_OWNER       = "IlySlothy"
 GH_REPO        = "Slothy-s-Tree"
 PACKS_JSON_URL = "https://raw.githubusercontent.com/IlySlothy/Slothy-s-Tree/main/src/main/resources/assets/slothyhub/packs.json"
+
+# Pack upload review — set YOUR Discord user ID (Developer Mode → right-click profile → Copy User ID).
+# The bot DMs you on every mod upload when this is set.
+PACK_REVIEW_OWNER_USER_ID = "469607647989989376"
+PACK_TICKET_GUILD_ID = "1112628116679045174"
+PACK_TICKET_CATEGORY_ID = "1252079007323656305"
+
+# Fallback if DM + ticket both fail or are unset
+PACK_REVIEW_CHANNEL_ID = "1508910255738716370"
 
 # Secrets (set with `wrangler secret put <NAME>`):
 #   DISCORD_PUBLIC_KEY   - Application -> General Information -> Public Key

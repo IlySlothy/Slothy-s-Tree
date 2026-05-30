@@ -63,10 +63,10 @@ public final class HeartbeatClient {
     }
 
     private static void ping() {
-        String base = SlothyConfig.getHeartbeatUrl();
+        String base = SlothyConfig.getWorkerBaseUrl();
         if (base == null || base.isBlank()) return;
 
-        String url = base.replaceAll("/+$", "") + "/v1/heartbeat";
+        String url = base + "/v1/heartbeat";
         String clientId = SlothyConfig.getVoterId();
         String body = "{\"clientId\":\"" + escapeJson(clientId) + "\"}";
 

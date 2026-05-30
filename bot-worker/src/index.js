@@ -4,6 +4,7 @@
  * Routes:
  *   POST  /              - Discord interactions endpoint (signature-required)
  *   POST  /v1/heartbeat  - Mod clients ping with {clientId: "<uuid>"}
+ *   POST  /v1/pack-submit - Mod uploads a built pack zip for moderator review
  *   GET   /v1/stats      - Read active count (mostly for debugging)
  *   GET   /healthz       - Liveness check
  *
@@ -30,6 +31,9 @@ const ACCENT        = 0x52D47A;
 const HEARTBEAT_TTL_SEC = 15 * 60;
 const STATS_CACHE_MS    = 5 * 60 * 1000;
 const USER_AGENT        = 'slothys-tree-bot/worker (+https://github.com/IlySlothy/Slothy-s-Tree)';
+const MAX_PACK_BYTES    = 8 * 1024 * 1024;
+const SUBMIT_RATE_MAX   = 3;
+const SUBMIT_RATE_TTL   = 60 * 60;
 
 const RELEASES = [
     {
@@ -75,6 +79,10 @@ const RELEASES = [
 
 function getRelease(id) {
     return RELEASES.find(r => r.id === id) ?? RELEASES[0];
+}
+
+function trimField(value, maxLen) {
+    return String(value ?? '').trim().slice(0, maxLen);
 }
 // Signature verification (Ed25519 via Web Crypto)
 
@@ -170,6 +178,159 @@ async function discordBotRequest(env, method, path, body) {
         },
         body: body ? JSON.stringify(body) : undefined,
     });
+}
+
+async function discordPostMultipart(env, channelId, payload, zipBytes, filename) {
+    const form = new FormData();
+    form.append('payload_json', JSON.stringify(payload));
+    form.append('files[0]', new Blob([zipBytes], { type: 'application/zip' }), filename);
+    const res = await fetch(`${DISCORD_API}/channels/${channelId}/messages`, {
+        method: 'POST',
+        headers: {
+            Authorization: `Bot ${env.DISCORD_TOKEN}`,
+            'User-Agent': USER_AGENT,
+        },
+        body: form,
+    });
+    if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Discord post HTTP ${res.status}: ${text.slice(0, 200)}`);
+    }
+    return res;
+}
+
+async function openDmChannel(env, userId) {
+    const res = await discordBotRequest(env, 'POST', '/users/@me/channels', { recipient_id: userId });
+    if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`open DM HTTP ${res.status}: ${text.slice(0, 160)}`);
+    }
+    return (await res.json()).id;
+}
+
+async function createPackTicketChannel(env, meta) {
+    const guildId = trimField(env.PACK_TICKET_GUILD_ID, 32);
+    const categoryId = trimField(env.PACK_TICKET_CATEGORY_ID, 32);
+    const ownerId = trimField(env.PACK_REVIEW_OWNER_USER_ID, 32);
+    if (!guildId || !categoryId) return null;
+
+    const slug = meta.packName
+        .replace(/[^a-z0-9]+/gi, '-')
+        .replace(/^-+|-+$/g, '')
+        .toLowerCase()
+        .slice(0, 24) || 'upload';
+    const name = `pack-${slug}-${meta.submissionId}`.slice(0, 100);
+
+    const overwrites = [{ id: guildId, type: 0, deny: '1024' }];
+    if (ownerId) {
+        overwrites.push({ id: ownerId, type: 1, allow: '117760' });
+    }
+    const botId = trimField(env.DISCORD_APP_ID, 32);
+    if (botId) {
+        // Bot must keep view/send on private ticket channels it creates.
+        overwrites.push({ id: botId, type: 1, allow: '117760' });
+    }
+
+    const res = await discordBotRequest(env, 'POST', `/guilds/${guildId}/channels`, {
+        name,
+        type: 0,
+        parent_id: categoryId,
+        topic: `Pack review · ${meta.packName} · ${meta.submissionId}`,
+        permission_overwrites: overwrites,
+    });
+    if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`create ticket HTTP ${res.status}: ${text.slice(0, 160)}`);
+    }
+    return (await res.json()).id;
+}
+
+function buildPackReviewPayload(env, meta, zipBytes, filename, context) {
+    const descLines = [
+        `**Pack:** ${meta.packName}`,
+        `**Minecraft author:** ${meta.authorName || 'Unknown'}`,
+    ];
+    if (meta.contact) descLines.push(`**Contact:** ${meta.contact}`);
+    if (meta.description) descLines.push('', meta.description);
+    descLines.push('', `**Submission ID:** \`${meta.submissionId}\``);
+    descLines.push(`**Client:** \`${meta.clientId.slice(0, 8)}…\``);
+    descLines.push(`**File:** \`${filename}\` (${(zipBytes.byteLength / 1024).toFixed(1)} KB)`);
+    if (context === 'ticket') {
+        descLines.push('', 'Approve by adding the pack to `docs/api/packs.json` and publishing a release asset.');
+    }
+
+    const ownerId = trimField(env.PACK_REVIEW_OWNER_USER_ID, 32);
+    let content = '📤 **New pack upload request**';
+    if (context === 'dm') {
+        content = '📤 **Pack upload for review** (DM from SlothyHub mod)';
+    } else if (context === 'ticket') {
+        content = '📤 **Pack upload ticket** — review and approve when ready.';
+    }
+    if (ownerId) content = `<@${ownerId}> ${content}`;
+
+    return {
+        content,
+        embeds: [{
+            title: meta.packName,
+            color: ACCENT,
+            description: descLines.join('\n').slice(0, 4000),
+            footer: { text: `${MOD_NAME} pack review · ${meta.packId || 'library pack'}` },
+            timestamp: new Date().toISOString(),
+        }],
+    };
+}
+
+/** DM owner and/or open a private ticket channel for each mod upload. */
+async function notifyPackSubmission(env, meta, zipBytes, filename) {
+    if (!env.DISCORD_TOKEN) {
+        throw new Error('DISCORD_TOKEN not configured');
+    }
+
+    const ownerId = trimField(env.PACK_REVIEW_OWNER_USER_ID, 32);
+    const hasTicket = trimField(env.PACK_TICKET_GUILD_ID, 32)
+        && trimField(env.PACK_TICKET_CATEGORY_ID, 32);
+    const fallbackChannel = trimField(env.PACK_REVIEW_CHANNEL_ID, 32);
+
+    if (!ownerId && !hasTicket && !fallbackChannel) {
+        throw new Error('Set PACK_REVIEW_OWNER_USER_ID and/or PACK_TICKET_GUILD_ID + PACK_TICKET_CATEGORY_ID');
+    }
+
+    const errors = [];
+    let notified = false;
+
+    if (ownerId) {
+        try {
+            const dmId = await openDmChannel(env, ownerId);
+            const payload = buildPackReviewPayload(env, meta, zipBytes, filename, 'dm');
+            await discordPostMultipart(env, dmId, payload, zipBytes, filename);
+            notified = true;
+        } catch (err) {
+            errors.push(`DM: ${err.message ?? err}`);
+            console.warn('pack-submit DM failed:', err.message ?? err);
+        }
+    }
+
+    if (hasTicket) {
+        try {
+            const ticketId = await createPackTicketChannel(env, meta);
+            const payload = buildPackReviewPayload(env, meta, zipBytes, filename, 'ticket');
+            await discordPostMultipart(env, ticketId, payload, zipBytes, filename);
+            notified = true;
+        } catch (err) {
+            errors.push(`ticket: ${err.message ?? err}`);
+            console.warn('pack-submit ticket failed:', err.message ?? err);
+        }
+    }
+
+    if (!notified && fallbackChannel) {
+        const payload = buildPackReviewPayload(env, meta, zipBytes, filename, 'channel');
+        await discordPostMultipart(env, fallbackChannel, payload, zipBytes, filename);
+        notified = true;
+    }
+
+    if (!notified) {
+        throw new Error(errors.join('; ') || 'Could not deliver pack review notification');
+    }
 }
 // Embeds
 
@@ -592,6 +753,93 @@ async function handleStats(env) {
     const activeUsers = await countActiveUsers(env);
     return json({ activeUsers, heartbeatTtlSec: HEARTBEAT_TTL_SEC });
 }
+
+async function checkSubmitRate(env, clientId) {
+    if (!clientId) return null;
+    const key = `submit:${clientId}`;
+    const raw = await env.HEARTBEATS.get(key);
+    const count = raw ? parseInt(raw, 10) : 0;
+    if (count >= SUBMIT_RATE_MAX) {
+        return json({
+            error: 'rate_limited',
+            message: `Max ${SUBMIT_RATE_MAX} pack uploads per hour. Try again later.`,
+        }, { status: 429 });
+    }
+    await env.HEARTBEATS.put(key, String(count + 1), { expirationTtl: SUBMIT_RATE_TTL });
+    return null;
+}
+
+async function postPackReviewMessage(env, meta, zipBytes, filename) {
+    await notifyPackSubmission(env, meta, zipBytes, filename);
+}
+
+async function handlePackSubmit(request, env) {
+    const ct = request.headers.get('content-type') || '';
+    if (!ct.includes('multipart/form-data')) {
+        return json({ error: 'expected_multipart', message: 'Send multipart/form-data.' }, { status: 400 });
+    }
+
+    let form;
+    try { form = await request.formData(); }
+    catch { return json({ error: 'bad_form', message: 'Could not read upload.' }, { status: 400 }); }
+
+    const file = form.get('pack');
+    if (!file || typeof file.arrayBuffer !== 'function') {
+        return json({ error: 'missing_file', message: 'Pack zip is required.' }, { status: 400 });
+    }
+
+    const packName = trimField(form.get('packName'), 80);
+    if (!packName) {
+        return json({ error: 'missing_name', message: 'Pack name is required.' }, { status: 400 });
+    }
+
+    const clientId = trimField(form.get('clientId'), 128);
+    const rateBlock = await checkSubmitRate(env, clientId);
+    if (rateBlock) return rateBlock;
+
+    const zipBytes = await file.arrayBuffer();
+    if (zipBytes.byteLength === 0) {
+        return json({ error: 'empty_file', message: 'Pack zip is empty.' }, { status: 400 });
+    }
+    if (zipBytes.byteLength > MAX_PACK_BYTES) {
+        return json({ error: 'too_large', message: 'Pack exceeds 8 MB upload limit.' }, { status: 413 });
+    }
+
+    const submissionId = crypto.randomUUID().slice(0, 8);
+    const meta = {
+        submissionId,
+        packName,
+        description: trimField(form.get('description'), 500),
+        authorName: trimField(form.get('authorName'), 64),
+        contact: trimField(form.get('contact'), 64),
+        packId: trimField(form.get('packId'), 128),
+        clientId: clientId || 'anonymous',
+    };
+
+    let filename = 'pack.zip';
+    if (file.name && String(file.name).trim()) {
+        filename = String(file.name).trim().replace(/[^\w.\- ]+/g, '_').slice(0, 80);
+        if (!filename.toLowerCase().endsWith('.zip')) filename += '.zip';
+    } else {
+        filename = `${packName.replace(/[^\w.\- ]+/g, '_').slice(0, 40) || 'pack'}.zip`;
+    }
+
+    try {
+        await postPackReviewMessage(env, meta, zipBytes, filename);
+    } catch (err) {
+        console.warn('pack-submit failed:', err.message ?? err);
+        return json({
+            error: 'review_channel_failed',
+            message: 'Upload server is not ready for reviews yet.',
+        }, { status: 503 });
+    }
+
+    return json({
+        ok: true,
+        submissionId,
+        message: 'Submitted for review! If approved, your pack will appear in the public browser.',
+    }, { status: 201 });
+}
 // Main entry point
 
 export default {
@@ -606,6 +854,9 @@ export default {
         }
         if (request.method === 'POST' && url.pathname === '/v1/heartbeat') {
             return handleHeartbeat(request, env);
+        }
+        if (request.method === 'POST' && url.pathname === '/v1/pack-submit') {
+            return handlePackSubmit(request, env);
         }
 
         if (request.method === 'POST' && (url.pathname === '/' || url.pathname === '/interactions')) {

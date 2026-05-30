@@ -105,6 +105,7 @@ public class PackLibraryScreen extends class_437 {
         if (packs.isEmpty()) {
             String msg = "No custom packs yet";
             String hint = "Build one in TEXTURES → Texture Builder";
+            String hint2 = "Then use UPLOAD to submit it for public review";
             int cy = (top + bot) / 2;
             Ui.drawPawPrint(ctx, field_22789 / 2, cy - 24, col(Ui.COL_ACCENT & 0xFFFFFF, 80), 1.4f);
             DrawHelper.drawText(ctx, field_22793, msg,
@@ -112,6 +113,9 @@ public class PackLibraryScreen extends class_437 {
             DrawHelper.drawText(ctx, field_22793, hint,
                 field_22789 / 2 - field_22793.method_1727(hint) / 2, cy + 14,
                 col(Ui.COL_MUTED & 0xFFFFFF, 160), false);
+            DrawHelper.drawText(ctx, field_22793, hint2,
+                field_22789 / 2 - field_22793.method_1727(hint2) / 2, cy + 28,
+                col(Ui.COL_MUTED & 0xFFFFFF, 140), false);
         } else {
             int cardW = Math.min(field_22789 - PAD * 2, 720);
             int cardX = (field_22789 - cardW) / 2;
@@ -150,14 +154,16 @@ public class PackLibraryScreen extends class_437 {
                 st.toLowerCase(Locale.ROOT).contains("fail") ? Ui.COL_DANGER : Ui.COL_ACCENT, false);
         }
 
-        int btnW = 64, btnH = 22, btnGap = 6;
+        int btnW = 58, btnH = 22, btnGap = 5;
         int delX = x + w - btnW - PAD;
         int applyX = delX - btnW - btnGap;
-        int customX = applyX - btnW - btnGap;
+        int uploadX = applyX - btnW - btnGap;
+        int customX = uploadX - btnW - btnGap;
         int btnY = y + (CARD_H - btnH) / 2;
         drawMiniBtn(ctx, customX, btnY, btnW, btnH, "EDIT", Ui.COL_ACCENT_H, mx, my);
+        drawMiniBtn(ctx, uploadX, btnY, btnW, btnH, "UPLOAD", 0xFF6EC4FF, mx, my);
         drawMiniBtn(ctx, applyX, btnY, btnW, btnH, "APPLY", Ui.COL_ACCENT, mx, my);
-        drawMiniBtn(ctx, delX, btnY, btnW, btnH, "DELETE", Ui.COL_DANGER, mx, my);
+        drawMiniBtn(ctx, delX, btnY, btnW, btnH, "DEL", Ui.COL_DANGER, mx, my);
     }
 
     private void drawMiniBtn(class_332 ctx, int x, int y, int w, int h, String label, int color, int mx, int my) {
@@ -190,13 +196,17 @@ public class PackLibraryScreen extends class_437 {
         for (Pack pack : packs) {
             if (y + CARD_H < top) { y += CARD_H; continue; }
             if (y > bot) break;
-            int btnW = 64, btnH = 22, btnGap = 6;
+            int btnW = 58, btnH = 22, btnGap = 5;
             int delX = cardX + cardW - btnW - PAD;
             int applyX = delX - btnW - btnGap;
-            int customX = applyX - btnW - btnGap;
+            int uploadX = applyX - btnW - btnGap;
+            int customX = uploadX - btnW - btnGap;
             int btnY = y + (CARD_H - btnH) / 2;
             if (mx >= customX && mx <= customX + btnW && my >= btnY && my <= btnY + btnH) {
                 customizePack(pack); return true;
+            }
+            if (mx >= uploadX && mx <= uploadX + btnW && my >= btnY && my <= btnY + btnH) {
+                requestUpload(pack); return true;
             }
             if (mx >= applyX && mx <= applyX + btnW && my >= btnY && my <= btnY + btnH) {
                 applyPack(pack); return true;
@@ -211,6 +221,10 @@ public class PackLibraryScreen extends class_437 {
 
     private void customizePack(Pack pack) {
         class_310.method_1551().method_1507(new TexturePickerScreen(this, pack));
+    }
+
+    private void requestUpload(Pack pack) {
+        class_310.method_1551().method_1507(new PackSubmitScreen(this, pack));
     }
 
     private void applyPack(Pack pack) {

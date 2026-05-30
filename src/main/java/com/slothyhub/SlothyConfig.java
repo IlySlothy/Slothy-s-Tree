@@ -17,6 +17,8 @@ public class SlothyConfig {
 
     /** Free GitHub Pages catalog — change in settings when you move to a paid domain. */
     public static final String DEFAULT_SERVER_URL = "https://ilyslothy.github.io/Slothy-s-Tree";
+    /** Cloudflare Worker for heartbeats and pack upload review. */
+    public static final String DEFAULT_WORKER_URL = "https://slothys-tree-bot.elytrapacks.workers.dev";
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("slothyhub.json");
@@ -93,6 +95,13 @@ public class SlothyConfig {
 
     public static String getHeartbeatUrl() {
         return heartbeatUrl == null ? "" : heartbeatUrl;
+    }
+
+    /** Worker base URL used for heartbeats and pack upload submissions. */
+    public static String getWorkerBaseUrl() {
+        String url = getHeartbeatUrl();
+        if (url != null && !url.isBlank()) return url.replaceAll("/+$", "");
+        return DEFAULT_WORKER_URL;
     }
 
     public static void setHeartbeatUrl(String url) {

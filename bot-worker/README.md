@@ -16,6 +16,35 @@ The same Worker also serves the mod-client heartbeat endpoint that feeds
 | ------ | ---------------- | ---------------------------------------------------------- |
 | POST   | `/`              | Discord Interactions endpoint (Ed25519 signature required) |
 | POST   | `/v1/heartbeat`  | Mod clients ping with `{ "clientId": "<stable-uuid>" }`    |
+| POST   | `/v1/pack-submit`| Mod uploads a built pack zip — **DMs you** and/or **opens a ticket** |
+
+### Pack upload review (mod → Discord)
+
+When someone hits **UPLOAD** in **My Pack Library**, the mod POSTs the zip to `/v1/pack-submit`.
+Configure **one or both** in `wrangler.toml`:
+
+| Variable | What it does |
+| -------- | ------------ |
+| `PACK_REVIEW_OWNER_USER_ID` | Bot **DMs you** every request (zip attached). **Recommended.** |
+| `PACK_TICKET_GUILD_ID` + `PACK_TICKET_CATEGORY_ID` | Bot creates a **private ticket channel** per upload (only you + bot can see it). |
+| `PACK_REVIEW_CHANNEL_ID` | Fallback public channel if DM/ticket fail. |
+
+**Get your user ID:** Discord → Settings → Advanced → Developer Mode ON → right-click your name → **Copy User ID**.
+
+**Get guild/category IDs:** right-click server / category → Copy ID.
+
+The bot needs **Manage Channels** (for tickets) and must share a server with you (for DMs).
+
+Example `wrangler.toml`:
+
+```toml
+PACK_REVIEW_OWNER_USER_ID = "123456789012345678"
+PACK_TICKET_GUILD_ID = "987654321098765432"
+PACK_TICKET_CATEGORY_ID = "111222333444555666"
+```
+
+Then redeploy: `npx wrangler deploy`
+
 | GET    | `/v1/stats`      | `{ activeUsers, heartbeatTtlSec }`                         |
 | GET    | `/healthz`       | `{ ok: true }`                                             |
 
@@ -127,6 +156,22 @@ servers; existing-server upgrades are usually instant.
 
 Try `/modinfo` in any server the bot is in. The bot will still show as
 "offline" in member lists - that's expected and not a bug.
+
+## Release announcements (Discord)
+
+After every GitHub release, post to **#bug-fixes** with `@here` and your usual role pings:
+
+1. Copy `gradle/secrets/discord.properties.example` → `.gradle/secrets/discord.properties`
+2. Set `webhookUrl` (bug-fixes channel webhook) and `roleIds` (comma-separated)
+3. Run after tagging / pushing releases:
+
+```powershell
+.\tools\post-release-discord.ps1 -Notes "Pack library customize, bubble coral, three-tier downloads."
+# or
+.\gradlew.bat announceReleaseDiscord -PreleaseNotes="Your bullet points here"
+```
+
+When releasing via Cursor, the agent will run this automatically after GitHub tags are pushed.
 
 ## Updating
 
