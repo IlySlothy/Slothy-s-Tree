@@ -86,6 +86,7 @@ function Match-PickerPng([string]$asset) {
     if ($lower -match 'golden_apple' -or $file -eq 'golden_apple') { return 'items' }
     if ($lower -match 'netherite_sword' -or $file -eq 'netherite_sword') { return 'items' }
     if ($lower -match 'cornflower' -or $file -eq 'cornflower') { return 'items' }
+    if ($lower -match 'amethyst_shard' -or $file -eq 'amethyst_shard') { return 'items' }
     if ($lower -match 'totem' -or $file -match 'totem') { return 'items' }
   }
   return $null
@@ -286,5 +287,9 @@ $catalog = [ordered]@{
 $outJson = Join-Path $Out 'textures.json'
 $catalog | ConvertTo-Json -Depth 12 | Set-Content -Path $outJson -Encoding UTF8
 
+$modJson = Join-Path $repo 'src\main\resources\assets\slothyhub\textures.json'
+Copy-Item -Path $outJson -Destination $modJson -Force
+
 Write-Host ""
 Write-Host "Wrote $outJson ($($webPacks.Count) packs, $totalFiles mirrored files)" -ForegroundColor Cyan
+Write-Host "Copied catalog to mod resources: $modJson" -ForegroundColor Cyan

@@ -112,7 +112,7 @@ public class TexturePickerScreen extends class_437 {
             new String[]{"assets/minecraft/textures/item/netherite_sword.png"},
             new String[]{"assets/minecraft/textures/item/"}, new String[]{"netherite_sword", "sword"},
             ParticleKind.NONE, SlotCategory.ITEMS, TexFolder.ITEM, null),
-        new SlotDef("Offhands",      "cornflower", new String[]{}, null, "cornflower",  "🌸", true, "assets/minecraft/textures/item/cornflower.png", new String[]{}, new String[]{"assets/minecraft/textures/item/", "assets/minecraft/textures/block/"}, new String[]{"cornflower"}, ParticleKind.NONE, SlotCategory.ITEMS, TexFolder.ITEM, null),
+        new SlotDef("Offhands",      "cornflower", new String[]{}, null, "cornflower",  "🌸", true, "assets/minecraft/textures/item/cornflower.png", new String[]{}, new String[]{"assets/minecraft/textures/item/", "assets/minecraft/textures/block/"}, new String[]{"cornflower", "amethyst_shard"}, ParticleKind.NONE, SlotCategory.ITEMS, TexFolder.ITEM, null),
         new SlotDef("Totem of Undying", "totem_of_undying", new String[]{}, null, "totem_of_undying", "♣", true,
             "assets/minecraft/textures/item/totem_of_undying.png",
             new String[]{"assets/minecraft/textures/item/totem_of_undying.png"},
@@ -130,6 +130,7 @@ public class TexturePickerScreen extends class_437 {
     private static final int ABSORPTION_FULL_SLOT = slotIndexByOutput("heart_absorption_full");
     private static final int ABSORPTION_HALF_SLOT = slotIndexByOutput("heart_absorption_half");
     private static final int NETHERITE_SWORD_SLOT = slotIndexByOutput("netherite_sword");
+    private static final int OFFHANDS_SLOT = slotIndexByOutput("cornflower");
     private static final int[][] HEART_PAIRS = {
         { HEART_FULL_SLOT, HEART_HALF_SLOT },
         { ABSORPTION_FULL_SLOT, ABSORPTION_HALF_SLOT },
@@ -287,6 +288,8 @@ public class TexturePickerScreen extends class_437 {
 
     /** Non-null when editing an existing library pack. */
     private final String editingLibrarySafeName;
+    /** Manifest id (e.g. {@code library:My_Pack}) when editing — used to upsert the same entry. */
+    private final String editingPackId;
     private byte[] editingZipBytes;
     private BuilderPackState pendingRestoreState;
 
@@ -333,6 +336,7 @@ public class TexturePickerScreen extends class_437 {
     public TexturePickerScreen(class_437 parent, Pack editPack) {
         super(class_2561.method_43470(editPack != null ? "Customize Pack" : "Texture Builder"));
         this.parent = parent;
+        this.editingPackId = editPack != null ? editPack.getId() : null;
         this.editingLibrarySafeName = editPack != null ? BuiltPackLibrary.safeNameFromPack(editPack) : null;
         if (editPack != null) {
             packName = editPack.getName();
@@ -359,6 +363,7 @@ public class TexturePickerScreen extends class_437 {
     @Override
     public void method_25419() {
         executor.shutdownNow();
+        if (parent instanceof PackLibraryScreen library) library.refreshOnReturn();
         class_310.method_1551().method_1507(parent);
     }
 
@@ -414,6 +419,21 @@ public class TexturePickerScreen extends class_437 {
         return slot.vanillaTexture() && slot.particleKind() != ParticleKind.GOLDEN_CRIT;
     }
 
+    /** Offhand cornflower override — pick item/block output folder like CIT slots. */
+    private static boolean supportsVanillaFolderTabs(SlotDef slot) {
+        return OFFHANDS_SLOT >= 0 && "cornflower".equals(slot.outputBaseName());
+    }
+
+    private static TexFolder[] folderChoicesForSlot(SlotDef slot) {
+        if (supportsVanillaFolderTabs(slot))
+            return new TexFolder[] { TexFolder.ITEM, TexFolder.BLOCK };
+        return TexFolder.values();
+    }
+
+    private int configStripHeight() {
+        return supportsVanillaFolderTabs(SLOTS[selectedSlot]) ? 70 : CFG_H;
+    }
+
     private String defaultOutputNameForSlot(int idx) {
         String custom = customOutputNames.get(idx);
         if (custom != null && !custom.isBlank()) return custom;
@@ -437,8 +457,14 @@ public class TexturePickerScreen extends class_437 {
 
     private String effectiveVanillaOutputPath(int idx) {
         SlotDef slot = SLOTS[idx];
-        String path = slot.vanillaOutputPath();
         String custom = customOutputNames.get(idx);
+        String baseName = slot.outputBaseName();
+        if (custom != null && !custom.isBlank() && !custom.equals(baseName))
+            baseName = sanitizeOutputFileName(custom);
+        if (supportsVanillaFolderTabs(slot)) {
+            return effectiveFolder(idx).assetPath + baseName + ".png";
+        }
+        String path = slot.vanillaOutputPath();
         if (custom == null || custom.isBlank() || custom.equals(slot.outputBaseName())) return path;
         String safe = sanitizeOutputFileName(custom);
         if (safe.isBlank()) return path;
@@ -525,6 +551,7 @@ public class TexturePickerScreen extends class_437 {
         }
 
         mergeSharedSwordPool(result);
+        mergeOffhandsPool(result);
 
         class_310 mc = class_310.method_1551();
         java.util.concurrent.CountDownLatch loaded = new java.util.concurrent.CountDownLatch(1);
@@ -544,6 +571,7 @@ public class TexturePickerScreen extends class_437 {
         }
 
         mergeSharedSwordPool(result);
+        mergeOffhandsPool(result);
         int totalOpts = result.values().stream().mapToInt(List::size).sum();
         final int finalPackCount = packCount;
         final int finalTotalOpts = totalOpts;
@@ -1003,6 +1031,22 @@ public class TexturePickerScreen extends class_437 {
         }
     }
 
+    /** Pull amethyst_shard textures from every slot into Offhands (cornflower). */
+    private static void mergeOffhandsPool(Map<Integer, List<TextureOption>> result) {
+        if (OFFHANDS_SLOT < 0) return;
+        List<TextureOption> dest = result.get(OFFHANDS_SLOT);
+        for (int si = 0; si < SLOTS.length; si++) {
+            if (si == OFFHANDS_SLOT) continue;
+            for (TextureOption opt : result.getOrDefault(si, List.of())) {
+                String lower = opt.pngEntry().toLowerCase(Locale.ROOT);
+                if (!lower.contains("amethyst_shard")) continue;
+                if (dest.stream().noneMatch(o ->
+                    o.label().equals(opt.label()) && Objects.equals(o.pngEntry(), opt.pngEntry())))
+                    dest.add(opt);
+            }
+        }
+    }
+
     /**
      * Populates the picker from {@link com.slothyhub.builder.WebTextureCatalog} for every
      * slot category (swords, GUI, particles, items, kill FX, sounds).
@@ -1043,6 +1087,7 @@ public class TexturePickerScreen extends class_437 {
         SlothyHubMod.LOGGER.info("WebTextureCatalog: added {} picker options from {} pack(s)",
             added, packs.size());
         mergeSharedSwordPool(out);
+        mergeOffhandsPool(out);
     }
 
     private static boolean webTextureMatchesSlot(
@@ -1286,6 +1331,10 @@ public class TexturePickerScreen extends class_437 {
         if (scanning) return;
         long chosen = selections.values().stream().filter(v -> v != null && v >= 0).count();
         if (chosen == 0) { buildStatus = "Select at least one texture first."; buildOk = false; return; }
+        if (editingLibrarySafeName != null) {
+            buildAndApply();
+            return;
+        }
         nameDialogOpen = true;
         buildStatus = null;
         packNameDraft = packName;
@@ -1445,9 +1494,11 @@ public class TexturePickerScreen extends class_437 {
                 String safe = editingLibrarySafeName != null
                     ? editingLibrarySafeName : BuiltPackLibrary.sanitizeName(packName);
                 byte[] zipBytes = buildPack(safe);
-                PackDownloader.applyBuiltPack(zipBytes, packName, safe);
+                PackDownloader.applyBuiltPack(zipBytes, packName, safe, editingPackId);
                 class_310.method_1551().execute(() -> {
-                    buildStatus = "Saved to resourcepacks/" + safe + ".zip + library";
+                    buildStatus = editingLibrarySafeName != null
+                        ? "Updated " + safe + ".zip in your library"
+                        : "Saved to resourcepacks/" + safe + ".zip + library";
                     buildOk = true;
                     KillEffectAssets.invalidate();
                 });
@@ -1902,8 +1953,9 @@ public class TexturePickerScreen extends class_437 {
 
     private void drawConfigStrip(class_332 ctx, int mx, int my) {
         int top = configTop();
-        ctx.method_25294(LEFT_W, top, field_22789, top + CFG_H, Ui.COL_PANEL);
-        ctx.method_25294(LEFT_W, top + CFG_H - 1, field_22789, top + CFG_H, Ui.COL_BORDER);
+        int stripH = configStripHeight();
+        ctx.method_25294(LEFT_W, top, field_22789, top + stripH, Ui.COL_PANEL);
+        ctx.method_25294(LEFT_W, top + stripH - 1, field_22789, top + stripH, Ui.COL_BORDER);
 
         SlotDef slot = SLOTS[selectedSlot];
         DrawHelper.drawText(ctx, field_22793, slot.emoji() + "  " + slot.display(),
@@ -1915,6 +1967,9 @@ public class TexturePickerScreen extends class_437 {
                     LEFT_W + PAD, top + 26, Ui.COL_MUTED, false);
                 drawOutputNameBar(ctx);
             }
+            if (supportsVanillaFolderTabs(slot)) {
+                drawFolderTabs(ctx, top + 38, selectedSlot);
+            }
             String hint = switch (slot.particleKind()) {
                 case GOLDEN_CRIT -> "Either Golden Crit or Critical Hit — includes .mcmeta + particles/crit.json";
                 case CRITICAL_HIT -> "Either Golden Crit or Critical Hit — from textures/particle/";
@@ -1923,27 +1978,36 @@ public class TexturePickerScreen extends class_437 {
                     ? "Pick any sword CIT texture — outputs textures/block/" + defaultOutputNameForSlot(selectedSlot) + ".png."
                     : isNetheriteVanillaSwordSlot(slot)
                     ? "Pick any sword CIT texture — outputs textures/item/" + defaultOutputNameForSlot(selectedSlot) + ".png."
+                    : supportsVanillaFolderTabs(slot)
+                    ? "Pick cornflower or amethyst_shard — outputs textures/"
+                        + effectiveFolder(selectedSlot).assetPath.replace("assets/minecraft/", "")
+                        + defaultOutputNameForSlot(selectedSlot) + ".png."
                     : "From textures/ folder in your packs.";
             };
-            int hintY = supportsOutputNameEdit(slot) ? top + 42 : top + 26;
+            int hintY = supportsVanillaFolderTabs(slot) ? top + 56
+                : supportsOutputNameEdit(slot) ? top + 42 : top + 26;
             DrawHelper.drawText(ctx, field_22793, hint, LEFT_W + PAD, hintY, Ui.COL_MUTED, false);
         } else {
             DrawHelper.drawText(ctx, field_22793, "CIT Name",
                 LEFT_W + PAD, top + 26, Ui.COL_MUTED, false);
             drawCitNameBar(ctx);
-            DrawHelper.drawText(ctx, field_22793, "Folder",
-                LEFT_W + PAD, top + 42, Ui.COL_MUTED, false);
-            int btnX = LEFT_W + PAD + field_22793.method_1727("Folder ") + 6;
-            int btnY = top + 38;
-            for (TexFolder f : TexFolder.values()) {
-                boolean active = f == effectiveFolder(selectedSlot);
-                int bw = field_22793.method_1727(f.label) + 10;
-                ctx.method_25294(btnX, btnY, btnX + bw, btnY + 14,
-                    active ? col(Ui.COL_ACCENT & 0xFFFFFF, 220) : col(Ui.COL_SURFACE & 0xFFFFFF, 160));
-                DrawHelper.drawText(ctx, field_22793, f.label, btnX + 5, btnY + 3,
-                    active ? Ui.COL_BG : Ui.COL_MUTED, false);
-                btnX += bw + 6;
-            }
+            drawFolderTabs(ctx, top + 38, selectedSlot);
+        }
+    }
+
+    private void drawFolderTabs(class_332 ctx, int btnY, int slotIdx) {
+        SlotDef slot = SLOTS[slotIdx];
+        DrawHelper.drawText(ctx, field_22793, "Folder",
+            LEFT_W + PAD, btnY - 4, Ui.COL_MUTED, false);
+        int btnX = LEFT_W + PAD + field_22793.method_1727("Folder ") + 6;
+        for (TexFolder f : folderChoicesForSlot(slot)) {
+            boolean active = f == effectiveFolder(slotIdx);
+            int bw = field_22793.method_1727(f.label) + 10;
+            ctx.method_25294(btnX, btnY, btnX + bw, btnY + 14,
+                active ? col(Ui.COL_ACCENT & 0xFFFFFF, 220) : col(Ui.COL_SURFACE & 0xFFFFFF, 160));
+            DrawHelper.drawText(ctx, field_22793, f.label, btnX + 5, btnY + 3,
+                active ? Ui.COL_BG : Ui.COL_MUTED, false);
+            btnX += bw + 6;
         }
     }
 
@@ -2024,13 +2088,13 @@ public class TexturePickerScreen extends class_437 {
 
     private void layoutSearchBar() {
         searchBarX = LEFT_W + PAD + searchLabelW();
-        searchBarY = configTop() + CFG_H + 4;
+        searchBarY = configTop() + configStripHeight() + 4;
         searchBarW = Math.max(120, field_22789 - searchBarX - PAD);
         searchBarH = SEARCH_H - 6;
     }
 
     private void drawSearchStrip(class_332 ctx) {
-        int top = configTop() + CFG_H;
+        int top = configTop() + configStripHeight();
         ctx.method_25294(LEFT_W, top, field_22789, top + SEARCH_H + 6, col(Ui.COL_PANEL & 0xFFFFFF, 180));
         ctx.method_25294(LEFT_W, top + SEARCH_H + 5, field_22789, top + SEARCH_H + 6, Ui.COL_BORDER);
         DrawHelper.drawText(ctx, field_22793, "Search", LEFT_W + PAD, top + 7, Ui.COL_MUTED, false);
@@ -2066,7 +2130,7 @@ public class TexturePickerScreen extends class_437 {
     }
 
     private void drawTexturePanel(class_332 ctx, int mx, int my, float delta) {
-        int top = configTop() + CFG_H + SEARCH_H + 8;
+        int top = configTop() + configStripHeight() + SEARCH_H + 8;
         int bot = field_22790 - FOOTER, panX = LEFT_W;
         ctx.method_25294(panX, top, field_22789, bot, Ui.COL_BG);
 
@@ -2289,12 +2353,13 @@ public class TexturePickerScreen extends class_437 {
             }
         }
 
-        // Folder toggles (CIT slots only)
-        if (!SLOTS[selectedSlot].vanillaTexture()) {
+        // Folder toggles (CIT + offhand cornflower)
+        SlotDef selSlot = SLOTS[selectedSlot];
+        if (!selSlot.vanillaTexture() || supportsVanillaFolderTabs(selSlot)) {
             int btnY = configTop() + 38;
             if (mx > LEFT_W && my >= btnY && my < btnY + 14) {
                 int btnX = LEFT_W + PAD + field_22793.method_1727("Folder ") + 6;
-                for (TexFolder f : TexFolder.values()) {
+                for (TexFolder f : folderChoicesForSlot(selSlot)) {
                     int bw = field_22793.method_1727(f.label) + 10;
                     if (mx >= btnX && mx < btnX + bw) {
                         folders.put(selectedSlot, f);
@@ -2306,7 +2371,7 @@ public class TexturePickerScreen extends class_437 {
         }
 
         // Texture list
-        int texTop = configTop() + CFG_H + SEARCH_H + 8;
+        int texTop = configTop() + configStripHeight() + SEARCH_H + 8;
         if (mx >= LEFT_W && my >= texTop && my < bot && !scanning) {
             List<TextureOption> allOpts = discovered.getOrDefault(selectedSlot, List.of());
             List<TextureOption> opts = filteredOptions(selectedSlot);
@@ -2334,7 +2399,7 @@ public class TexturePickerScreen extends class_437 {
                 Math.max(0, visCount * ITEM_H - (bot - top - 18)));
         } else {
             List<TextureOption> opts = filteredOptions(selectedSlot);
-            int texTop = configTop() + CFG_H + SEARCH_H + 8;
+            int texTop = configTop() + configStripHeight() + SEARCH_H + 8;
             texScrollTarget = clamp(texScrollTarget - vDelta * 24, 0,
                 Math.max(0, (opts.size() + 1) * 30 - (bot - texTop - 4)));
         }
