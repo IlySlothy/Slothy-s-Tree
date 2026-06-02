@@ -2,6 +2,7 @@
 param(
   [string] $Version = '',
   [string] $Notes = '',
+  [string] $NotesFile = '',
   [string] $ConfigPath = ''
 )
 
@@ -63,17 +64,28 @@ foreach ($id in $roleIds) { $pingParts += "<@&$id>" }
 $content = ($pingParts -join ' ')
 if (-not $content) { $content = 'New release:' }
 
-$noteLines = if ($Notes) {
-  ($Notes -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-} else {
-  @(
-    'Offhands slot - ITEM/BLOCK tabs plus amethyst_shard textures pulled from every pack'
-    'Pack Library edit - reopen a saved pack and save updates the same entry (no duplicate packs)'
-    'Heart slots - Heart Half auto-selects matching Heart Full from the same pack'
-    'Performance - CIT name cache, early exit for non-CIT items, lighter HUD tick work'
-    'Web catalog - bundled + live merge so new textures appear before GitHub Pages updates'
-  )
+function Get-ReleaseNoteLines {
+  param([string] $RawNotes, [string] $Path)
+  if ($RawNotes) {
+    return @($RawNotes -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+  }
+  if ($Path -and (Test-Path $Path)) {
+    $lines = @()
+    Get-Content $Path | ForEach-Object {
+      $t = $_.Trim()
+      if (-not $t -or $t.StartsWith('#')) { return }
+      if ($t.StartsWith('###')) { return }
+      if ($t.StartsWith('Catalog:')) { return }
+      if ($t.StartsWith('- ')) { $lines += $t.Substring(2).Trim(); return }
+      if ($t.StartsWith('* ')) { $lines += $t.Substring(2).Trim(); return }
+      $lines += $t
+    }
+    if ($lines.Count -gt 0) { return $lines }
+  }
+  return @('See GitHub release notes for details.')
 }
+
+$noteLines = Get-ReleaseNoteLines -RawNotes $Notes -Path $NotesFile
 
 $descLines = @(
   "Fresh v$baseVer builds are on GitHub. Pick the jar for your Minecraft version below."
@@ -96,7 +108,7 @@ $embed = @{
   fields      = @(
     @{
       name   = 'MC 1.21.9 - 1.21.11'
-      value  = "[$tag111]($repoUrl/tag/$tag111)`nMain jar + CIT companion (both required)"
+      value  = "[$tag111]($repoUrl/tag/$tag111)`nMain jar (embedded CIT still in development)"
       inline = $true
     },
     @{
@@ -106,7 +118,7 @@ $embed = @{
     },
     @{
       name   = 'MC 1.20 - 1.21.1'
-      value  = "[$tag201]($repoUrl/tag/$tag201)`nLegacy jar + CIT companion"
+      value  = "[$tag201]($repoUrl/tag/$tag201)`nLegacy main jar - add CIT Resewn (modrinth.com/mod/cit-resewn) for full CIT"
       inline = $true
     },
     @{

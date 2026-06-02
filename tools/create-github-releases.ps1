@@ -104,3 +104,4 @@ Upload-Release $tag201 "SlothyHub v$BaseVer (MC 1.20-1.21.1)" @(
 ) | Out-Null
 
 Write-Host 'All GitHub releases done.'
+Write-Host 'Next: post Discord — tools\post-release-discord.ps1 -Version <mod_version> -NotesFile <release-notes.md>'
