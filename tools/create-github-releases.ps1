@@ -48,7 +48,25 @@ function Upload-Release($tag, $name, [string[]] $assets) {
   try {
     $existing = Invoke-RestMethod -Uri "https://api.github.com/repos/IlySlothy/Slothy-s-Tree/releases/tags/$tag" -Headers $headers
     if ($existing.tag_name) {
-      Write-Host "Release $tag already exists - skipping create"
+      Write-Host "Release $tag already exists - replacing assets"
+      foreach ($a in @($existing.assets)) {
+        Invoke-RestMethod -Uri "https://api.github.com/repos/IlySlothy/Slothy-s-Tree/releases/assets/$($a.id)" `
+          -Method Delete -Headers $headers | Out-Null
+      }
+      foreach ($asset in $assets) {
+        $path = Join-Path $AssetsDir $asset
+        if (-not (Test-Path $path)) { throw "Missing asset: $path" }
+        $bytes = [System.IO.File]::ReadAllBytes($path)
+        $uploadHeaders = @{
+          Authorization = $headers.Authorization
+          Accept        = 'application/vnd.github+json'
+          'Content-Type'= 'application/java-archive'
+          'User-Agent'  = 'SlothyHubRelease/1.0'
+        }
+        Invoke-RestMethod -Uri "https://uploads.github.com/repos/IlySlothy/Slothy-s-Tree/releases/$($existing.id)/assets?name=$asset" `
+          -Method Post -Headers $uploadHeaders -Body $bytes | Out-Null
+        Write-Host "  uploaded $asset"
+      }
       return $existing
     }
   } catch {
@@ -99,8 +117,7 @@ Upload-Release $tag118 "SlothyHub v$BaseVer (MC 1.21.8)" @(
 ) | Out-Null
 
 Upload-Release $tag201 "SlothyHub v$BaseVer (MC 1.20-1.21.1)" @(
-  "slothyhub-${BaseVer}-mc1.20-1.21.1.jar",
-  "slothyhub-legacy-cit-${BaseVer}-mc1.21.8-legacy.jar"
+  "slothyhub-${BaseVer}-mc1.20-1.21.1.jar"
 ) | Out-Null
 
 Write-Host 'All GitHub releases done.'

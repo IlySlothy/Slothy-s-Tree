@@ -3,7 +3,9 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - 'v*-mc1.21.8'
+      - 'v*-mc1.21.11'
+      - 'v*-mc1.20-1.21.1'
 
 permissions:
   contents: write
@@ -14,105 +16,75 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create GitHub Release (1.21.11)
-        if: github.ref == 'refs/tags/v1.0.3-mc1.21.11'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Build release jars
+        run: ./gradlew copyReleaseAssets --no-daemon
+
+      - name: Parse tag
+        id: tag
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          echo "full=$TAG" >> "$GITHUB_OUTPUT"
+          echo "jar_prefix=slothyhub-${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Release MC 1.21.8
+        if: endsWith(github.ref, '-mc1.21.8')
         uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
-          files: |
-            release-assets/slothyhub-1.0.3-mc1.21.11.jar
-            release-assets/slothyhub-cit-1.0.3-mc1.21.11.jar
-          body: |
-            ## Minecraft 1.21.9 – 1.21.11 (Fabric)
-
-            Install both jars into your mods folder:
-
-            - `slothyhub-1.0.3-mc1.21.11.jar` — main hub (pack browser, builder, themes, pack library)
-            - `slothyhub-cit-1.0.3-mc1.21.11.jar` — CIT companion (required on 1.21.9+)
-
-            Feather path example: `.feather/user-mods/1.21.11-fabric/`
-
-            ### Requirements
-            - Fabric Loader 0.19+
-            - Fabric API (matching 1.21.11)
-            - Java 21
-
-            ### What's new in v1.0.3
-            - Offhands slot: ITEM/BLOCK tabs + amethyst_shard from all packs
-            - Pack Library edit saves in place (no duplicate packs)
-            - Heart Half auto-pairs Heart Full from the same pack
-            - CIT performance: name cache + early exit for non-CIT items
-            - Web catalog live merge for new textures before Pages updates
-
-            ### Notes
-            - Do **not** install the 1.21.8 jar on 1.21.11
-            - CIT is **not** in the main jar on 1.21.9+ — install the CIT companion
-
-      - name: Create GitHub Release (1.21.8)
-        if: github.ref == 'refs/tags/v1.0.3-mc1.21.8'
-        uses: softprops/action-gh-release@v2
-        with:
-          generate_release_notes: true
-          files: |
-            release-assets/slothyhub-1.0.3-mc1.21.8.jar
+          tag_name: ${{ steps.tag.outputs.full }}
+          name: Slothy's Tree ${{ steps.tag.outputs.full }}
+          files: release-assets/${{ steps.tag.outputs.jar_prefix }}.jar
           body: |
             ## Minecraft 1.21.8 (Fabric)
 
-            Download `slothyhub-1.0.3-mc1.21.8.jar` and drop it into your Fabric mods folder.
+            Download `${{ steps.tag.outputs.jar_prefix }}.jar` into your Fabric mods folder.
 
             ### Requirements
             - Fabric Loader 0.19+
             - Fabric API (matching 1.21.8)
             - Java 21
 
-            CIT is included in the main jar on 1.21.8.
+            CIT is built into the main jar on 1.21.8.
 
-            ### What's new in v1.0.3
-            - Offhands slot: ITEM/BLOCK tabs + amethyst_shard from all packs
-            - Pack Library edit saves in place (no duplicate packs)
-            - Heart Half auto-pairs Heart Full from the same pack
-            - CIT performance: name cache + early exit for non-CIT items
-            - Web catalog live merge for new textures before Pages updates
-
-      - name: Create GitHub Release (Legacy 1.20–1.21.1)
-        if: github.ref == 'refs/tags/v1.0.3-mc1.20-1.21.1'
+      - name: Release MC 1.21.9–1.21.11
+        if: endsWith(github.ref, '-mc1.21.11')
         uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
+          tag_name: ${{ steps.tag.outputs.full }}
+          name: Slothy's Tree ${{ steps.tag.outputs.full }}
           files: |
-            release-assets/slothyhub-1.0.3-mc1.20-1.21.1.jar
-            release-assets/slothyhub-legacy-cit-1.0.3-mc1.21.8-legacy.jar
+            release-assets/${{ steps.tag.outputs.jar_prefix }}.jar
+            release-assets/slothyhub-cit-${{ steps.tag.outputs.jar_prefix }}.jar
           body: |
-            ## Minecraft 1.20 – 1.21.1 (Fabric, Legacy)
+            ## Minecraft 1.21.9 – 1.21.11 (Fabric)
 
-            Download both jars and drop them into your Fabric mods folder:
+            Install the main jar. Optional CIT companion jar is included for early testing; embedded CIT is still in development.
 
-            - `slothyhub-1.0.3-mc1.20-1.21.1.jar` — main hub
-            - `slothyhub-legacy-cit-1.0.3-mc1.21.8-legacy.jar` — CIT companion for MC 1.20–1.21.7
+            - `${{ steps.tag.outputs.jar_prefix }}.jar` — main hub
+            - `slothyhub-cit-${{ steps.tag.outputs.jar_prefix }}.jar` — optional CIT companion
 
-            On **1.21.8**, use the dedicated 1.21.8 release instead (`v1.0.3-mc1.21.8`).
+            ### Requirements
+            - Fabric Loader 0.19+
+            - Fabric API (matching your MC version)
+            - Java 21
+
+      - name: Release MC 1.20–1.21.1 (legacy)
+        if: endsWith(github.ref, '-mc1.20-1.21.1')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.full }}
+          name: Slothy's Tree ${{ steps.tag.outputs.full }}
+          files: release-assets/${{ steps.tag.outputs.jar_prefix }}.jar
+          body: |
+            ## Minecraft 1.20 – 1.21.1 (Fabric, legacy)
+
+            Download `${{ steps.tag.outputs.jar_prefix }}.jar`. For full CIT, also install [CIT Resewn](https://modrinth.com/mod/cit-resewn) for your version.
 
             ### Requirements
             - Fabric Loader 0.14+
             - Fabric API (matching your MC version)
             - Java 17 or 21
-
-            ### What's new in v1.0.3
-            - Offhands slot: ITEM/BLOCK tabs + amethyst_shard from all packs
-            - Pack Library edit saves in place (no duplicate packs)
-            - Heart Half auto-pairs Heart Full from the same pack
-            - CIT performance: name cache + early exit for non-CIT items
-            - Web catalog live merge for new textures before Pages updates
-
-            ### CIT behaviour
-            - The bundled CIT engine **automatically yields to CIT Resewn / Chime / other CIT-providing mods** when one is present in your mods folder.
-            - On MC 1.20–1.21.7, install the legacy CIT companion jar above.
-
-      - name: Create GitHub Release (fallback)
-        if: github.ref != 'refs/tags/v1.0.3-mc1.21.11' && github.ref != 'refs/tags/v1.0.3-mc1.21.8' && github.ref != 'refs/tags/v1.0.3-mc1.20-1.21.1'
-        uses: softprops/action-gh-release@v2
-        with:
-          generate_release_notes: true
-          files: |
-            release-assets/slothyhub-1.0.3-mc1.21.11.jar
-            release-assets/slothyhub-cit-1.0.3-mc1.21.11.jar
