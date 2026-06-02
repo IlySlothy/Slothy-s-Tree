@@ -16,7 +16,7 @@ apply from: rootProject.file('gradle/modrinth.gradle')
 // is present in the mods folder - this avoids the double-handler crashes seen
 // on MC 1.21.1 with CIT Resewn installed.
 
-version = '1.0.5-mc1.20-1.21.1'
+version = '1.0.6-mc1.20-1.21.1'
 group = project.maven_group
 
 tasks.register('remapJar', Jar) {

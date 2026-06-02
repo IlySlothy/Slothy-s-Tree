@@ -76,11 +76,10 @@ def releaseCit111 = "slothyhub-cit-${project.mod_version.replace('-mc1.21.8', '-
 def releaseJar201 = "slothyhub-${project(':slothyhub-legacy-1.21.4').version}.jar"
 def releaseCitLegacy = "slothyhub-legacy-cit-${project.mod_version}-legacy.jar"
 
-ext.modrinthChangelog = '''### v1.0.5
-- Star / unstar packs in the Pack Browser (live community counts)
-- Featured pack, upload tags, My Uploads dashboard, What's New screen
-- Texture Builder: fixed hang on resource pack scan
-- Discord: top-10 pack star leaderboard (`/setup-leaderboard`)
+ext.modrinthChangelog = '''### v1.0.6
+- Pack Browser: fixed freeze on open (resource pack scan no longer blocks the game thread)
+- Pack Browser: CLOSE and ESC work on 1.21.8 again (input registration fix)
+- Faster local pack scan (capped zip walk, CIT warnings moved off the hot path)
 
 Catalog: https://ilyslothy.github.io/Slothy-s-Tree'''
 

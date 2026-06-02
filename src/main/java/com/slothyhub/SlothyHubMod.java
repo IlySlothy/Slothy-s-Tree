@@ -3,6 +3,7 @@ package com.slothyhub;
 import com.slothyhub.cit.CitEngine;
 import com.slothyhub.compat.Identifiers;
 import com.slothyhub.compat.McVersion;
+import com.slothyhub.compat.SlothyScreenInputs;
 import com.slothyhub.compat.TickDeltaCompat;
 import com.slothyhub.local.LocalPackManager;
 import com.slothyhub.ui.Ui;
@@ -108,6 +109,9 @@ public class SlothyHubMod implements ClientModInitializer {
         });
 
         ScreenEvents.AFTER_INIT.register((client, screen, scaledW, scaledH) -> {
+            if (screen.getClass().getName().startsWith("com.slothyhub.")) {
+                SlothyScreenInputs.register(screen);
+            }
             if (screen instanceof SlothyHubScreenBase slothyScreen) {
                 ScreenMouseEvents.beforeMouseScroll(screen).register(
                     (scr, mx, my, hDelta, vDelta) -> slothyScreen.onScrollDelta(vDelta));

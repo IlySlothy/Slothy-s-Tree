@@ -170,7 +170,8 @@ public abstract class SlothyHubScreenBase extends class_437 {
 
     @Override
     public void method_25394(class_332 ctx, int mx, int my, float delta) {
-        inputPoller.poll(mx, my, (x, y, btn) -> method_25402(x, y, btn), null);
+        inputPoller.poll(mx, my, (x, y, btn) -> method_25402(x, y, btn),
+            (key, scan, mods) -> method_25404(key, scan, mods));
 
         scroll += (scrollTarget - scroll) * Math.min(1f, delta * 0.28f);
         for (Map.Entry<String, Float> e : dlProgress.entrySet()) {
@@ -963,7 +964,7 @@ public abstract class SlothyHubScreenBase extends class_437 {
         if (key == 256 && !searchQuery.isEmpty()) {
             searchQuery = ""; searchFocused = false; invalidateCache(); return true;
         }
-        if (InputCompat.needsPolling() && key == 256) { method_25419(); return true; }
+        if (key == 256) { method_25419(); return true; }
         return super.method_25404(key, scan, mods);
     }
 
@@ -1064,48 +1065,47 @@ public abstract class SlothyHubScreenBase extends class_437 {
     }
 
     private void fetchPacks() {
-        localPacks = InstalledPackScanner.scan(catalogFilenames(PackCatalog.loadEmbedded()));
-        if (!SlothyConfig.isConfigured()) {
-            allPacks = new ArrayList<>(localPacks);
-            loading = false;
-            // Still render icons for locally-installed packs even without a server.
-            loadThumbs("");
-            return;
-        }
-        String srv = SlothyConfig.getServerUrl();
+        // All disk/network work stays off the render thread — scanning resourcepacks/ can take minutes.
         executor.submit(() -> {
+            if (!SlothyConfig.isConfigured()) {
+                List<Pack> local = InstalledPackScanner.scan(catalogFilenames(PackCatalog.loadEmbedded()));
+                class_310.method_1551().execute(() -> applyPackList(local, List.of(), "", null));
+                return;
+            }
+            String srv = SlothyConfig.getServerUrl();
             try {
                 List<Pack> loaded = PackApiClient.fetchPacks(srv);
-                class_310.method_1551().execute(() -> {
-                    remotePacks = loaded;
-                    localPacks  = InstalledPackScanner.scan(catalogFilenames(remotePacks));
-                    allPacks    = mergeCatalog(remotePacks, localPacks);
-                    loading = false; error = null;
-                    activeIds = PackDownloader.getActivePackIds();
-                    for (Pack p : allPacks) {
-                        if (activeIds.contains(p.getId())) {
-                            dlState.put(p.getId(), DlState.DONE);
-                            dlProgress.put(p.getId(), 1f); dlProgressUi.put(p.getId(), 1f);
-                        }
-                    }
-                    cardEntryT = 0;
-                    loadThumbs(srv);
-                });
+                List<Pack> local = InstalledPackScanner.scan(catalogFilenames(loaded));
+                class_310.method_1551().execute(() ->
+                    applyPackList(local, loaded, srv, null));
             } catch (Exception e) {
                 String msg = e.getMessage();
                 if (msg == null || msg.isBlank()) msg = e.getClass().getSimpleName();
+                List<Pack> embedded = PackCatalog.loadEmbedded();
+                List<Pack> local = InstalledPackScanner.scan(catalogFilenames(embedded));
                 String fm = msg;
-                class_310.method_1551().execute(() -> {
-                    error = fm;
-                    loading = false;
-                    List<Pack> embedded = PackCatalog.loadEmbedded();
-                    localPacks = InstalledPackScanner.scan(catalogFilenames(embedded));
-                    allPacks = mergeCatalog(embedded, localPacks);
-                    // Catalog fetch failed (offline / API down) — still load icons for what we have.
-                    loadThumbs(srv);
-                });
+                class_310.method_1551().execute(() ->
+                    applyPackList(local, embedded, srv, fm));
             }
         });
+    }
+
+    private void applyPackList(List<Pack> local, List<Pack> remote, String srv, String err) {
+        localPacks = local != null ? local : List.of();
+        remotePacks = remote != null ? remote : List.of();
+        allPacks = mergeCatalog(remotePacks, localPacks);
+        loading = false;
+        error = err;
+        activeIds = PackDownloader.getActivePackIds();
+        for (Pack p : allPacks) {
+            if (activeIds.contains(p.getId())) {
+                dlState.put(p.getId(), DlState.DONE);
+                dlProgress.put(p.getId(), 1f);
+                dlProgressUi.put(p.getId(), 1f);
+            }
+        }
+        cardEntryT = 0;
+        loadThumbs(srv != null ? srv : "");
     }
 
     private void loadThumbs(String srv) {

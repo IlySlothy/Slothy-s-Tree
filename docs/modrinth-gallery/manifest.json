@@ -1,0 +1,30 @@
+[
+  {
+    "file": "01-pack-browser.png",
+    "featured": true,
+    "ordering": 0,
+    "title": "Pack list with previews",
+    "description": "Browse curated packs with thumbnail previews, tags, star counts, and Hang & Apply. Search and filter by SMP, CPVP, ElyPVP, Applied, and more."
+  },
+  {
+    "file": "02-texture-builder.png",
+    "featured": false,
+    "ordering": 1,
+    "title": "Texture Builder",
+    "description": "Pick a CIT item (swords, GUI, potions, items), browse overrides from active packs with live previews, then Build & Apply to weave a custom pack."
+  },
+  {
+    "file": "03-custom-items-ingame.png",
+    "featured": false,
+    "ordering": 2,
+    "title": "Custom items in-game",
+    "description": "Applied packs change armor, bows, tools, and items in multiplayer — custom textures visible on item frames and in your hotbar."
+  },
+  {
+    "file": "05-sloth-mascot.png",
+    "featured": false,
+    "ordering": 3,
+    "title": "Slothy mascot",
+    "description": "Slothy's Tree branding — the sloth icon used in the mod menu and on Modrinth."
+  }
+]

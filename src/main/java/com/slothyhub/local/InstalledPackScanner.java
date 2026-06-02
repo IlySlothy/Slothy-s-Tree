@@ -30,6 +30,8 @@ public final class InstalledPackScanner {
 
     /** Packs already warned about uppercase CIT paths — keeps the log to one line per pack. */
     private static final java.util.Set<String> UPPERCASE_CIT_WARNED = ConcurrentHashMap.newKeySet();
+    /** Cap zip entry walks so opening the pack browser cannot scan huge archives for minutes. */
+    private static final int MAX_ZIP_ENTRIES_PER_PACK = 400;
 
     private InstalledPackScanner() {}
 
@@ -63,7 +65,7 @@ public final class InstalledPackScanner {
                 Pack p = buildPack(entry, name, isZip, true);
                 if (p != null) {
                     out.put(key, p);
-                    warnIfPackHasUppercaseCitFolders(entry, name, isZip);
+                    scheduleUppercaseCitWarning(entry, name, isZip);
                 }
             }
         } catch (IOException e) {
@@ -77,10 +79,21 @@ public final class InstalledPackScanner {
      * folders inside someone else's pack, so warn once per pack so the user
      * understands why their CIT entries silently don't apply.
      */
-    private static void warnIfPackHasUppercaseCitFolders(Path entry, String name, boolean isZip) {
-        if (!UPPERCASE_CIT_WARNED.add(name.toLowerCase(Locale.ROOT))) return;
+    private static void scheduleUppercaseCitWarning(Path entry, String name, boolean isZip) {
+        String key = name.toLowerCase(Locale.ROOT);
+        if (!UPPERCASE_CIT_WARNED.add(key)) return;
+        Thread t = new Thread(() -> warnIfPackHasUppercaseCitFolders(entry, name, isZip, key),
+            "slothyhub-cit-warn");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    private static void warnIfPackHasUppercaseCitFolders(Path entry, String name, boolean isZip, String key) {
         String offender = isZip ? scanZipForUppercaseCit(entry) : scanFolderForUppercaseCit(entry);
-        if (offender == null) return;
+        if (offender == null) {
+            UPPERCASE_CIT_WARNED.remove(key);
+            return;
+        }
         SlothyHubMod.LOGGER.warn(
             "Pack '{}' contains uppercase CIT folders (e.g. '{}') — Minecraft 1.19+ rejects these paths. "
             + "Rename the folder to lowercase (e.g. pro_sword, warden_sword) for CIT to apply.",
@@ -90,7 +103,8 @@ public final class InstalledPackScanner {
     private static String scanZipForUppercaseCit(Path zipPath) {
         try (ZipFile zf = new ZipFile(zipPath.toFile())) {
             var it = zf.entries();
-            while (it.hasMoreElements()) {
+            int n = 0;
+            while (it.hasMoreElements() && n++ < MAX_ZIP_ENTRIES_PER_PACK) {
                 String e = it.nextElement().getName().replace('\\', '/');
                 String hit = uppercaseCitSegment(e);
                 if (hit != null) return hit;
@@ -101,7 +115,9 @@ public final class InstalledPackScanner {
 
     private static String scanFolderForUppercaseCit(Path folder) {
         try (Stream<Path> walk = Files.walk(folder)) {
-            for (Path p : walk.toList()) {
+            int n = 0;
+            for (Path p : (Iterable<Path>) walk::iterator) {
+                if (n++ >= MAX_ZIP_ENTRIES_PER_PACK) break;
                 String rel = folder.relativize(p).toString().replace('\\', '/');
                 String hit = uppercaseCitSegment(rel);
                 if (hit != null) return hit;
